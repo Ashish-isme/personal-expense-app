@@ -1,0 +1,44 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-surface-subtle text-neutral-800 dark:bg-surface-dark dark:text-neutral-100;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  /* Subtle, thin scrollbars that match the theme. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-neutral-300 dark:bg-neutral-700 rounded-full;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  /* Shared card surface used across the app. */
+  .card {
+    @apply rounded-xl border border-neutral-200 bg-white shadow-card
+           dark:border-neutral-800 dark:bg-surface-card;
+  }
+  /* Text field / select base style. */
+  .field {
+    @apply w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm
+           text-neutral-800 outline-none transition
+           focus:border-brand focus:ring-2 focus:ring-brand/20
+           dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium text-neutral-500 dark:text-neutral-400;
+  }
+}

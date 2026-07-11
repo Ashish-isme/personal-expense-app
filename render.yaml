@@ -1,0 +1,26 @@
+# Render Blueprint — deploys the backend API with a persistent SQLite disk.
+# In the Render dashboard: New + → Blueprint → point at this repo.
+services:
+  - type: web
+    name: finance-tracker-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    # Install deps + generate the Prisma client at build time.
+    buildCommand: npm install && npx prisma generate
+    # Ensure the schema exists on the mounted disk, then start the API.
+    startCommand: npx prisma db push --skip-generate && npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        value: file:/var/data/finance.db
+      - key: CORS_ORIGIN
+        # Set this to your Vercel frontend URL after deploying the frontend.
+        value: "*"
+      - key: NODE_VERSION
+        value: "20"
+    # Persistent disk so the SQLite database survives restarts/redeploys.
+    disk:
+      name: finance-data
+      mountPath: /var/data
+      sizeGB: 1

@@ -1,0 +1,94 @@
+// Prisma schema for the Personal Finance Tracker.
+// Multi-user: every record belongs to a User. SQLite keeps deployment
+// simple and persists on a mounted volume (Railway) or disk (Render).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// An application user. Data is fully isolated per user.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  expenses Expense[]
+  incomes  Income[]
+  budgets  Budget[]
+  debts    Debt[]
+}
+
+/// A single spending record.
+model Expense {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date          DateTime
+  category      String
+  description   String
+  amount        Float
+  paymentMethod String   @default("Cash") // Cash | Bank | eSewa | Khalti
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, date])
+  @@index([userId, category])
+}
+
+/// A single income record.
+model Income {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime
+  source    String
+  amount    Float
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, date])
+}
+
+/// Per-category monthly budget. `month` is stored as `YYYY-MM`.
+model Budget {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month     String // e.g. "2026-07"
+  category  String
+  amount    Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, month, category])
+  @@index([userId, month])
+}
+
+/// Money owed — either the user owes someone, or someone owes the user.
+model Debt {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  person      String
+  amount      Float
+  description String?
+  dueDate     DateTime?
+  // direction: "i_owe" (I owe them) | "owed_to_me" (they owe me)
+  direction   String    @default("i_owe")
+  // status: "pending" | "paid"
+  status      String    @default("pending")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId, direction])
+  @@index([userId, status])
+}
