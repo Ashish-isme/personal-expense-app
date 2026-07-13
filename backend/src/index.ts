@@ -8,6 +8,8 @@ import incomeRouter from "./routes/income.js";
 import budgetsRouter from "./routes/budgets.js";
 import debtsRouter from "./routes/debts.js";
 import recurringRouter from "./routes/recurring.js";
+import groupsRouter from "./routes/groups.js";
+import notificationsRouter, { monthlySummaryHandler } from "./routes/notifications.js";
 import dashboardRouter from "./routes/dashboard.js";
 import reportsRouter from "./routes/reports.js";
 import { requireAuth } from "./lib/auth.js";
@@ -25,12 +27,17 @@ app.get("/api/health", (_req, res) => res.json({ status: "ok", time: new Date().
 // ---- Public auth routes ------------------------------------------------------
 app.use("/api/auth", authRouter);
 
+// ---- Cron endpoint (no session; guarded by the CRON_SECRET header) ------------
+app.post("/api/cron/monthly-summary", monthlySummaryHandler);
+
 // ---- Feature routes (all require a valid session) ----------------------------
 app.use("/api/expenses", requireAuth, expensesRouter);
 app.use("/api/income", requireAuth, incomeRouter);
 app.use("/api/budgets", requireAuth, budgetsRouter);
 app.use("/api/debts", requireAuth, debtsRouter);
 app.use("/api/recurring", requireAuth, recurringRouter);
+app.use("/api/groups", requireAuth, groupsRouter);
+app.use("/api/notifications", requireAuth, notificationsRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/reports", requireAuth, reportsRouter);
 

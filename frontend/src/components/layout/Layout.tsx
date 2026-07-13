@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Menu, Moon, Sun } from "lucide-react";
 import { Sidebar } from "./Sidebar";
+import { NotificationBell } from "./NotificationBell";
 import { useTheme } from "../../context/ThemeContext";
 import { api } from "../../lib/api";
 
@@ -33,13 +34,16 @@ export function Layout() {
             <Menu size={20} />
           </button>
           <div className="hidden lg:block" />
-          <button
-            onClick={toggle}
-            className="rounded-lg border border-neutral-300 p-2 text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            aria-label="Toggle theme"
-          >
-            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <button
+              onClick={toggle}
+              className="rounded-lg border border-neutral-300 p-2 text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              aria-label="Toggle theme"
+            >
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+          </div>
         </header>
 
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">

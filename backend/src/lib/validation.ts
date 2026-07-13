@@ -66,6 +66,38 @@ export const recurringSchema = z
     path: ["endDate"],
   });
 
+// ---- Group / shared-expense schemas ------------------------------------------
+
+export const groupSchema = z.object({
+  name: z.string().min(1, "Group name is required").max(60, "Group name is too long"),
+});
+
+export const groupExpenseSchema = z.object({
+  description: z.string().min(1, "Description is required"),
+  amount: z.coerce.number().positive("Amount must be greater than 0"),
+  date: z.coerce.date(),
+  // Who actually paid. Defaults to the requesting user when omitted.
+  paidById: z.string().optional(),
+  splitMode: z.enum(["equal", "custom", "percent"]).default("equal"),
+  notes: z.string().optional().nullable(),
+  participants: z
+    .array(
+      z.object({
+        userId: z.string().min(1),
+        // Exact share for "custom", percentage for "percent", unused for "equal".
+        value: z.coerce.number().optional(),
+      })
+    )
+    .min(1, "Pick at least one person to split with"),
+});
+
+export const settlementSchema = z.object({
+  // Who is being paid. The payer is always the requesting user.
+  toUserId: z.string().min(1, "Recipient is required"),
+  amount: z.coerce.number().positive("Amount must be greater than 0"),
+  note: z.string().optional().nullable(),
+});
+
 export const debtSchema = z.object({
   person: z.string().min(1, "Person is required"),
   amount: z.coerce.number().positive("Amount must be greater than 0"),

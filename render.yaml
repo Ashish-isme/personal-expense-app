@@ -18,6 +18,22 @@ services:
       # without this the API falls back to an insecure development default.
       - key: JWT_SECRET
         generateValue: true
+      # Protects the month-end summary endpoint that an external cron calls.
+      - key: CRON_SECRET
+        generateValue: true
+      # SMTP is optional — without it, month-end summaries still arrive in-app
+      # and email is simply skipped. Set these in the Render dashboard to enable
+      # email (for Gmail, use an App Password, not your account password).
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
       - key: CORS_ORIGIN
         # Set this to your Vercel frontend URL after deploying the frontend.
         value: "*"

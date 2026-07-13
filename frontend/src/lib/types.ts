@@ -67,6 +67,98 @@ export interface Debt {
   status: DebtStatus;
 }
 
+// ---- Groups / shared expenses ------------------------------------------------
+
+export type SplitMode = "equal" | "custom" | "percent";
+export type SettlementStatus = "pending" | "confirmed" | "declined";
+
+export interface GroupSummary {
+  id: string;
+  name: string;
+  inviteCode: string;
+  createdById: string;
+  memberCount: number;
+  expenseCount: number;
+  /** >0 you are owed money, <0 you owe money. */
+  net: number;
+}
+
+export interface MemberBalance {
+  userId: string;
+  name: string | null;
+  email: string;
+  paid: number;
+  owed: number;
+  net: number;
+}
+
+export interface Transfer {
+  fromUserId: string;
+  fromName: string;
+  toUserId: string;
+  toName: string;
+  amount: number;
+}
+
+export interface GroupExpenseSplit {
+  id: string;
+  userId: string;
+  amount: number;
+  user: User;
+}
+
+export interface GroupExpense {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  splitMode: SplitMode;
+  notes?: string | null;
+  paidById: string;
+  paidBy: User;
+  splits: GroupExpenseSplit[];
+}
+
+export interface Settlement {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  fromUser: User;
+  toUser: User;
+  amount: number;
+  note?: string | null;
+  status: SettlementStatus;
+  createdAt: string;
+  confirmedAt?: string | null;
+}
+
+export interface GroupDetail {
+  id: string;
+  name: string;
+  inviteCode: string;
+  createdById: string;
+  members: User[];
+  balances: MemberBalance[];
+  transfers: Transfer[];
+  expenses: GroupExpense[];
+  settlements: Settlement[];
+}
+
+export interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  groupId?: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
+export interface NotificationFeed {
+  items: Notification[];
+  unread: number;
+}
+
 export interface DashboardSummary {
   monthlyIncome: number;
   monthlyBudget: number;

@@ -7,6 +7,7 @@ import {
   HandCoins,
   FileBarChart,
   Repeat,
+  Users,
   LogOut,
   X,
 } from "lucide-react";
@@ -19,6 +20,7 @@ const nav = [
   { to: "/income", label: "Income", icon: Wallet },
   { to: "/budget", label: "Budget", icon: PiggyBank },
   { to: "/debts", label: "Money Owed", icon: HandCoins },
+  { to: "/groups", label: "Groups", icon: Users },
   { to: "/recurring", label: "Recurring", icon: Repeat },
   { to: "/reports", label: "Reports", icon: FileBarChart },
 ];

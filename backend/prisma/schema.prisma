@@ -24,6 +24,115 @@ model User {
   budgets    Budget[]
   debts      Debt[]
   recurrings Recurring[]
+
+  // Group / shared-expense relations
+  createdGroups       Group[]             @relation("GroupCreator")
+  memberships         GroupMember[]
+  groupExpensesPaid   GroupExpense[]      @relation("ExpensePayer")
+  groupExpenseShares  GroupExpenseSplit[]
+  settlementsSent     Settlement[]        @relation("SettlementFrom")
+  settlementsReceived Settlement[]        @relation("SettlementTo")
+  notifications       Notification[]
+}
+
+/// A group of people who share expenses (a trip, a flat, a dinner crew).
+/// Anyone holding `inviteCode` can join.
+model Group {
+  id          String   @id @default(cuid())
+  name        String
+  inviteCode  String   @unique
+  createdById String
+  createdBy   User     @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  members     GroupMember[]
+  expenses    GroupExpense[]
+  settlements Settlement[]
+}
+
+/// Membership join table. A user may belong to many groups.
+model GroupMember {
+  id       String   @id @default(cuid())
+  groupId  String
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt DateTime @default(now())
+
+  @@unique([groupId, userId])
+  @@index([userId])
+}
+
+/// A shared expense: one member paid, and some set of members owe a share of it.
+model GroupExpense {
+  id          String   @id @default(cuid())
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  paidById    String
+  paidBy      User     @relation("ExpensePayer", fields: [paidById], references: [id], onDelete: Cascade)
+  description String
+  amount      Float
+  date        DateTime
+  // splitMode: "equal" | "custom" | "percent" — how `splits` was derived.
+  splitMode   String   @default("equal")
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  splits GroupExpenseSplit[]
+
+  @@index([groupId, date])
+}
+
+/// One member's share of a GroupExpense. Shares always sum to the expense total.
+model GroupExpenseSplit {
+  id        String       @id @default(cuid())
+  expenseId String
+  expense   GroupExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Float
+
+  @@unique([expenseId, userId])
+  @@index([userId])
+}
+
+/// A repayment from one member to another. The debtor records it ("I paid you"),
+/// the creditor confirms it ("received"). Only `confirmed` settlements move balances.
+model Settlement {
+  id          String    @id @default(cuid())
+  groupId     String
+  group       Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  fromUserId  String
+  fromUser    User      @relation("SettlementFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId    String
+  toUser      User      @relation("SettlementTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  amount      Float
+  note        String?
+  // status: "pending" (claimed, awaiting confirmation) | "confirmed" | "declined"
+  status      String    @default("pending")
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+
+  @@index([groupId, status])
+  @@index([toUserId, status])
+}
+
+/// In-app notification. Also the source record for month-end summary emails.
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // type: "expense_added" | "settlement_requested" | "settlement_confirmed"
+  //     | "settlement_declined" | "monthly_summary" | "member_joined"
+  type      String
+  title     String
+  body      String
+  groupId   String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
 }
 
 /// A single spending record.

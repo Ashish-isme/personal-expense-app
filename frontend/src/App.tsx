@@ -7,6 +7,8 @@ import { Budget } from "./pages/Budget";
 import { Debts } from "./pages/Debts";
 import { Reports } from "./pages/Reports";
 import { Recurring } from "./pages/Recurring";
+import { Groups } from "./pages/Groups";
+import { GroupDetail } from "./pages/GroupDetail";
 import { Login } from "./pages/Login";
 import { useAuth } from "./context/AuthContext";
 
@@ -41,6 +43,8 @@ export function App() {
         <Route path="income" element={<Income />} />
         <Route path="budget" element={<Budget />} />
         <Route path="debts" element={<Debts />} />
+        <Route path="groups" element={<Groups />} />
+        <Route path="groups/:id" element={<GroupDetail />} />
         <Route path="recurring" element={<Recurring />} />
         <Route path="reports" element={<Reports />} />
         <Route path="*" element={<Navigate to="/" replace />} />
