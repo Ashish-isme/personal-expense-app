@@ -1,5 +1,11 @@
-# Render Blueprint — deploys the backend API with a persistent SQLite disk.
+# Render Blueprint — deploys the backend API.
 # In the Render dashboard: New + → Blueprint → point at this repo.
+#
+# The database is an external managed Postgres (e.g. a free Neon project), NOT a
+# file on this service. Render's free instances have an ephemeral filesystem and
+# don't support persistent disks, so a SQLite file would be destroyed on every
+# restart, redeploy and spin-down. Keeping the data in Postgres means the web
+# service can be wiped and restarted freely without losing anything.
 services:
   - type: web
     name: finance-tracker-api
@@ -8,12 +14,14 @@ services:
     plan: free
     # Install deps + generate the Prisma client at build time.
     buildCommand: npm install && npx prisma generate
-    # Ensure the schema exists on the mounted disk, then start the API.
+    # Sync the schema to the database, then start the API.
     startCommand: npx prisma db push --skip-generate && npm start
     healthCheckPath: /api/health
     envVars:
+      # Paste your Neon (or other managed Postgres) connection string here in the
+      # Render dashboard. Must include ?sslmode=require.
       - key: DATABASE_URL
-        value: file:/var/data/finance.db
+        sync: false
       # Signing key for auth tokens. Render generates a strong random value —
       # without this the API falls back to an insecure development default.
       - key: JWT_SECRET
@@ -39,8 +47,3 @@ services:
         value: "*"
       - key: NODE_VERSION
         value: "20"
-    # Persistent disk so the SQLite database survives restarts/redeploys.
-    disk:
-      name: finance-data
-      mountPath: /var/data
-      sizeGB: 1

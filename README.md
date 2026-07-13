@@ -24,7 +24,8 @@ A modern personal finance tracker with a clean **Notion / Linear‑inspired** UI
 | --------- | ------------------------------------------------------- |
 | Frontend  | React + TypeScript + Tailwind CSS + Recharts + Lucide   |
 | Backend   | Node.js + Express                                       |
-| Database  | SQLite via Prisma ORM                                    |
+| Database  | PostgreSQL via Prisma ORM                                |
+| Email     | Nodemailer (SMTP, optional)                              |
 | Tooling   | Bun (package manager), Vite                              |
 
 ## 📁 Project Structure
@@ -52,14 +53,25 @@ PersonalExpenseApp/
 ## 🚀 Getting Started (Local)
 
 > Requires [Bun](https://bun.sh) (`curl -fsSL https://bun.sh/install | bash`). Node 18+ also works.
+> You'll also need a Postgres to point at — the one-liner below runs one in Docker.
 
-### 1. Backend
+### 1. Database
+
+```bash
+docker run -d --name ft-pg \
+  -e POSTGRES_PASSWORD=test -e POSTGRES_DB=finance \
+  -p 55432:5432 postgres:16-alpine
+```
+
+(Already have Postgres, or want to use a Neon database? Just set `DATABASE_URL` to it and skip this.)
+
+### 2. Backend
 
 ```bash
 cd backend
-cp .env.example .env        # default uses a local SQLite file
+cp .env.example .env        # defaults to the Docker Postgres above
 bun install
-bun run db:push             # create the SQLite schema
+bun run db:push             # create the schema
 bun run seed                # (optional) load sample data + demo account
 bun run dev                 # → http://localhost:4000
 ```
@@ -67,7 +79,7 @@ bun run dev                 # → http://localhost:4000
 > The seed creates a demo account you can sign in with: **demo@finance.app** / **demo1234**.
 > Otherwise just hit **Sign up** on the login screen to create your own.
 
-### 2. Frontend
+### 3. Frontend
 
 ```bash
 cd frontend
@@ -79,21 +91,33 @@ The Vite dev server proxies `/api` to the backend on port 4000, so no extra conf
 
 ## ☁️ Deployment
 
-The frontend deploys to **Vercel** and the backend to **Render** (with a persistent disk for the SQLite database).
+Database on **Neon** (managed Postgres), backend on **Render**, frontend on **Vercel**. All three have free tiers that comfortably run this app.
 
-### Backend → Render
+> **Why not SQLite on Render?** Render's free instances have an ephemeral filesystem and don't support persistent disks — a SQLite file would be destroyed on every restart, redeploy and spin-down, taking every account and balance with it. Keeping the data in a managed Postgres means the web service can be wiped and restarted freely without losing anything.
+
+### 1. Database → Neon
+
+1. Create a free project at **[neon.tech](https://neon.tech)**.
+2. Copy the connection string (it looks like `postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require`).
+
+### 2. Backend → Render
 
 1. Push this repo to GitHub.
-2. In Render: **New + → Blueprint** and select the repo. The included `render.yaml` provisions a web service with a **1 GB persistent disk** mounted at `/var/data` (so the database survives restarts and redeploys) and auto-generates a strong `JWT_SECRET`.
-3. After it deploys, set the `CORS_ORIGIN` env var to your Vercel URL (e.g. `https://your-app.vercel.app`).
+2. In Render: **New + → Blueprint** and select the repo. `render.yaml` provisions the web service and auto-generates `JWT_SECRET` and `CRON_SECRET`.
+3. Set **`DATABASE_URL`** to your Neon connection string.
+4. Once the frontend is up, set **`CORS_ORIGIN`** to your Vercel URL (it defaults to `*`, i.e. open to any origin).
 
-> Prefer manual setup? Create a Web Service with **Root Directory** `backend`, build `npm install && npx prisma generate`, start `npx prisma db push --skip-generate && npm start`, add a disk at `/var/data`, and set `DATABASE_URL=file:/var/data/finance.db` plus a long random `JWT_SECRET`. Without `JWT_SECRET` the API falls back to an insecure default and logs a warning.
+The start command runs `prisma db push`, so the schema is created on the Neon database automatically on first deploy.
 
-### Frontend → Vercel
+> Prefer the manual form over a Blueprint? Create a **Web Service** with **Root Directory** `backend`, build `npm install && npx prisma generate`, start `npx prisma db push --skip-generate && npm start`, and set `DATABASE_URL`, a long random `JWT_SECRET`, and `CORS_ORIGIN`. Without `JWT_SECRET` the API falls back to an insecure default and logs a warning.
+
+### 3. Frontend → Vercel
 
 1. In Vercel: **Add New → Project**, import the repo, set **Root Directory** to `frontend`.
 2. Add an environment variable `VITE_API_URL` = your Render backend URL (e.g. `https://finance-tracker-api.onrender.com`).
 3. Deploy. Vercel auto-detects Vite (build `vite build`, output `dist`). `vercel.json` handles SPA routing.
+
+> Render's free instances sleep after ~15 minutes of inactivity, so the first request after a lull takes ~30–50s while the service wakes. The data itself is safe on Neon regardless.
 
 ## 🔌 API Reference
 

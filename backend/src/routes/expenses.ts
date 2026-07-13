@@ -34,11 +34,12 @@ router.get(
     if (maxAmount && !isNaN(Number(maxAmount))) amount.lte = Number(maxAmount);
     if (Object.keys(amount).length) where.amount = amount;
 
-    // Free-text search across description and notes (case-insensitive on SQLite).
+    // Free-text search across description and notes. `mode: "insensitive"` is
+    // required on Postgres, where LIKE is case-sensitive by default.
     if (search) {
       where.OR = [
-        { description: { contains: search } },
-        { notes: { contains: search } },
+        { description: { contains: search, mode: "insensitive" } },
+        { notes: { contains: search, mode: "insensitive" } },
       ];
     }
 

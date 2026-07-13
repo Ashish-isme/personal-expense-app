@@ -1,13 +1,17 @@
 // Prisma schema for the Personal Finance Tracker.
-// Multi-user: every record belongs to a User. SQLite keeps deployment
-// simple and persists on a mounted volume (Railway) or disk (Render).
+// Multi-user: every record belongs to a User.
+//
+// Postgres (rather than SQLite) because the app is deployed on a host with an
+// ephemeral filesystem — a SQLite file would be wiped on every restart and
+// redeploy, taking every account and balance with it. A managed Postgres
+// (e.g. Neon) persists independently of the web service.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
