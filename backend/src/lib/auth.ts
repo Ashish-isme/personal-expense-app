@@ -30,7 +30,13 @@ export function signToken(userId: string): string {
  */
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
-  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  // Prefer the Authorization header; fall back to a `?token=` query param so
+  // browser-initiated file downloads (CSV/Excel via <a href>) can authenticate.
+  const token = header?.startsWith("Bearer ")
+    ? header.slice(7)
+    : typeof req.query.token === "string"
+      ? req.query.token
+      : null;
   if (!token) return res.status(401).json({ error: "Authentication required" });
 
   try {

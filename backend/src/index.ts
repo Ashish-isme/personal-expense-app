@@ -7,6 +7,7 @@ import expensesRouter from "./routes/expenses.js";
 import incomeRouter from "./routes/income.js";
 import budgetsRouter from "./routes/budgets.js";
 import debtsRouter from "./routes/debts.js";
+import recurringRouter from "./routes/recurring.js";
 import dashboardRouter from "./routes/dashboard.js";
 import reportsRouter from "./routes/reports.js";
 import { requireAuth } from "./lib/auth.js";
@@ -29,6 +30,7 @@ app.use("/api/expenses", requireAuth, expensesRouter);
 app.use("/api/income", requireAuth, incomeRouter);
 app.use("/api/budgets", requireAuth, budgetsRouter);
 app.use("/api/debts", requireAuth, debtsRouter);
+app.use("/api/recurring", requireAuth, recurringRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/reports", requireAuth, reportsRouter);
 

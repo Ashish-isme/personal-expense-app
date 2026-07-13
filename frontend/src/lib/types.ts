@@ -1,5 +1,11 @@
 // Shared TypeScript models mirroring the API responses.
 
+export interface User {
+  id: string;
+  email: string;
+  name?: string | null;
+}
+
 export type PaymentMethod = "Cash" | "Bank" | "eSewa" | "Khalti";
 export type DebtDirection = "i_owe" | "owed_to_me";
 export type DebtStatus = "pending" | "paid";
@@ -31,6 +37,24 @@ export interface Budget {
   actual: number;
   remaining: number;
   percentUsed: number;
+}
+
+export type RecurringType = "expense" | "income";
+export type RecurringFrequency = "weekly" | "monthly";
+
+export interface Recurring {
+  id: string;
+  type: RecurringType;
+  frequency: RecurringFrequency;
+  category: string;
+  description: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  notes?: string | null;
+  startDate: string;
+  endDate?: string | null;
+  nextRun: string;
+  active: boolean;
 }
 
 export interface Debt {

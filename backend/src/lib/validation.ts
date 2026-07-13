@@ -48,6 +48,24 @@ export const budgetSchema = z.object({
   amount: z.coerce.number().nonnegative("Amount must be 0 or more"),
 });
 
+export const recurringSchema = z
+  .object({
+    type: z.enum(["expense", "income"]).default("expense"),
+    frequency: z.enum(["weekly", "monthly"]).default("monthly"),
+    category: z.string().min(1, "Category is required"),
+    description: z.string().min(1, "Description is required"),
+    amount: z.coerce.number().positive("Amount must be greater than 0"),
+    paymentMethod: z.enum(["Cash", "Bank", "eSewa", "Khalti"]).default("Cash"),
+    notes: z.string().optional().nullable(),
+    startDate: z.coerce.date(),
+    endDate: z.coerce.date().optional().nullable(),
+    active: z.boolean().optional().default(true),
+  })
+  .refine((d) => !d.endDate || d.endDate >= d.startDate, {
+    message: "End date must be on or after the start date",
+    path: ["endDate"],
+  });
+
 export const debtSchema = z.object({
   person: z.string().min(1, "Person is required"),
   amount: z.coerce.number().positive("Amount must be greater than 0"),

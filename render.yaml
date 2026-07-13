@@ -14,6 +14,10 @@ services:
     envVars:
       - key: DATABASE_URL
         value: file:/var/data/finance.db
+      # Signing key for auth tokens. Render generates a strong random value —
+      # without this the API falls back to an insecure development default.
+      - key: JWT_SECRET
+        generateValue: true
       - key: CORS_ORIGIN
         # Set this to your Vercel frontend URL after deploying the frontend.
         value: "*"

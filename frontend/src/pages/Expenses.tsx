@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, Receipt } from "lucide-react";
+import { Plus, Pencil, Trash2, Receipt, Search, X } from "lucide-react";
 import { useFetch } from "../lib/useFetch";
 import { api } from "../lib/api";
 import type { Expense, PaymentMethod } from "../lib/types";
@@ -28,11 +28,34 @@ const methodTone: Record<PaymentMethod, "green" | "blue" | "amber" | "neutral"> 
 
 export function Expenses() {
   const [month, setMonth] = useState(currentMonth());
-  const { data, loading, reload } = useFetch<Expense[]>(`/api/expenses?month=${month}`);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
+
+  const hasFilters = Boolean(search || category || minAmount || maxAmount);
+
+  const query = useMemo(() => {
+    const params = new URLSearchParams({ month });
+    if (search) params.set("search", search);
+    if (category) params.set("category", category);
+    if (minAmount) params.set("minAmount", minAmount);
+    if (maxAmount) params.set("maxAmount", maxAmount);
+    return params.toString();
+  }, [month, search, category, minAmount, maxAmount]);
+
+  const { data, loading, reload } = useFetch<Expense[]>(`/api/expenses?${query}`);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [open, setOpen] = useState(false);
 
   const total = useMemo(() => (data ?? []).reduce((s, e) => s + e.amount, 0), [data]);
+
+  const clearFilters = () => {
+    setSearch("");
+    setCategory("");
+    setMinAmount("");
+    setMaxAmount("");
+  };
 
   const openAdd = () => {
     setEditing(null);
@@ -63,6 +86,51 @@ export function Expenses() {
           </>
         }
       />
+
+      {/* Search & filter bar */}
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative flex-1 sm:min-w-[220px]">
+          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search description or notes…"
+            className="pl-9"
+            aria-label="Search expenses"
+          />
+        </div>
+        <Select value={category} onChange={(e) => setCategory(e.target.value)} className="sm:w-40" aria-label="Filter by category">
+          <option value="">All categories</option>
+          {EXPENSE_CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </Select>
+        <Input
+          type="number"
+          value={minAmount}
+          onChange={(e) => setMinAmount(e.target.value)}
+          placeholder="Min"
+          min="0"
+          className="sm:w-24"
+          aria-label="Minimum amount"
+        />
+        <Input
+          type="number"
+          value={maxAmount}
+          onChange={(e) => setMaxAmount(e.target.value)}
+          placeholder="Max"
+          min="0"
+          className="sm:w-24"
+          aria-label="Maximum amount"
+        />
+        {hasFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <X size={14} /> Clear
+          </Button>
+        )}
+      </div>
 
       <div className="card overflow-hidden">
         {loading && !data ? (
@@ -113,7 +181,11 @@ export function Expenses() {
             </table>
           </div>
         ) : (
-          <EmptyState icon={Receipt} title="No expenses this month" description="Add your first expense to get started." />
+          <EmptyState
+            icon={Receipt}
+            title={hasFilters ? "No matching expenses" : "No expenses this month"}
+            description={hasFilters ? "Try adjusting or clearing your filters." : "Add your first expense to get started."}
+          />
         )}
       </div>
 

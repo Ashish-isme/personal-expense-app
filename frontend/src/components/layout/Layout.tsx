@@ -1,13 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Menu, Moon, Sun } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { useTheme } from "../../context/ThemeContext";
+import { api } from "../../lib/api";
 
 /** App shell: sidebar + top bar + routed page content. */
 export function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { theme, toggle } = useTheme();
+
+  // Materialize any due recurring transactions once when the app shell loads,
+  // so the dashboard and lists reflect them without visiting the Recurring page.
+  useEffect(() => {
+    api.post("/api/recurring/run", {}).catch(() => {
+      /* non-critical — the Recurring page has a manual "Run now" fallback */
+    });
+  }, []);
 
   return (
     <div className="min-h-screen">

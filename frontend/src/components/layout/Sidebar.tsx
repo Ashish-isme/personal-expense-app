@@ -6,9 +6,12 @@ import {
   PiggyBank,
   HandCoins,
   FileBarChart,
+  Repeat,
+  LogOut,
   X,
 } from "lucide-react";
 import { cx } from "../../lib/utils";
+import { useAuth } from "../../context/AuthContext";
 
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -16,6 +19,7 @@ const nav = [
   { to: "/income", label: "Income", icon: Wallet },
   { to: "/budget", label: "Budget", icon: PiggyBank },
   { to: "/debts", label: "Money Owed", icon: HandCoins },
+  { to: "/recurring", label: "Recurring", icon: Repeat },
   { to: "/reports", label: "Reports", icon: FileBarChart },
 ];
 
@@ -26,6 +30,7 @@ interface SidebarProps {
 
 /** Left navigation. Fixed on desktop, slide-over drawer on mobile. */
 export function Sidebar({ open, onClose }: SidebarProps) {
+  const { user, logout } = useAuth();
   return (
     <>
       {/* Mobile backdrop */}
@@ -77,8 +82,26 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           ))}
         </nav>
 
-        <div className="border-t border-neutral-200 p-4 text-xs text-neutral-400 dark:border-neutral-800 dark:text-neutral-500">
-          Personal Finance Tracker
+        <div className="border-t border-neutral-200 p-3 dark:border-neutral-800">
+          <div className="flex items-center gap-3 rounded-lg px-2 py-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10 text-sm font-semibold uppercase text-brand">
+              {(user?.name || user?.email || "?").charAt(0)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-neutral-800 dark:text-neutral-100">
+                {user?.name || "Account"}
+              </p>
+              <p className="truncate text-xs text-neutral-400">{user?.email}</p>
+            </div>
+            <button
+              onClick={logout}
+              className="rounded-md p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-red-600 dark:hover:bg-neutral-800"
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
       </aside>
     </>

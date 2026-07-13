@@ -85,3 +85,15 @@ export const EXPENSE_CATEGORIES = [
 ];
 
 export const PAYMENT_METHODS = ["Cash", "Bank", "eSewa", "Khalti"] as const;
+
+/** Percentage at/above which a budget is flagged as "near its limit". */
+export const BUDGET_WARN_THRESHOLD = 80;
+
+export type BudgetStatus = "ok" | "warning" | "over";
+
+/** Classifies a budget by how much of it has been used. */
+export function budgetStatus(percentUsed: number): BudgetStatus {
+  if (percentUsed > 100) return "over";
+  if (percentUsed >= BUDGET_WARN_THRESHOLD) return "warning";
+  return "ok";
+}

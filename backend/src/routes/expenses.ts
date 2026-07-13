@@ -4,17 +4,42 @@ import { asyncHandler, parseBody, expenseSchema } from "../lib/validation.js";
 
 const router = Router();
 
-// GET /api/expenses — optional ?month=YYYY-MM, ?category=, ?limit=
+// GET /api/expenses
+// Filters (all optional): ?month=YYYY-MM, ?category=, ?limit=,
+//   ?search= (matches description or notes), ?minAmount=, ?maxAmount=,
+//   ?from=YYYY-MM-DD, ?to=YYYY-MM-DD (explicit date range; overrides ?month).
 router.get(
   "/",
   asyncHandler(async (req, res) => {
-    const { month, category, limit } = req.query as Record<string, string>;
+    const { month, category, limit, search, minAmount, maxAmount, from, to } =
+      req.query as Record<string, string>;
 
     const where: Record<string, unknown> = { userId: req.userId };
     if (category) where.category = category;
-    if (month) {
+
+    // Date range: an explicit from/to wins; otherwise fall back to ?month.
+    if (from || to) {
+      const range: Record<string, Date> = {};
+      if (from) range.gte = new Date(`${from}T00:00:00`);
+      if (to) range.lt = new Date(new Date(`${to}T00:00:00`).getTime() + 24 * 60 * 60 * 1000);
+      where.date = range;
+    } else if (month) {
       const [y, m] = month.split("-").map(Number);
       where.date = { gte: new Date(y, m - 1, 1), lt: new Date(y, m, 1) };
+    }
+
+    // Amount range.
+    const amount: Record<string, number> = {};
+    if (minAmount && !isNaN(Number(minAmount))) amount.gte = Number(minAmount);
+    if (maxAmount && !isNaN(Number(maxAmount))) amount.lte = Number(maxAmount);
+    if (Object.keys(amount).length) where.amount = amount;
+
+    // Free-text search across description and notes (case-insensitive on SQLite).
+    if (search) {
+      where.OR = [
+        { description: { contains: search } },
+        { notes: { contains: search } },
+      ];
     }
 
     const expenses = await prisma.expense.findMany({

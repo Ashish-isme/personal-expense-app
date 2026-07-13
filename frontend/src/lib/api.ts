@@ -3,12 +3,41 @@
 // In production, VITE_API_URL points at the Render backend.
 
 const BASE = import.meta.env.VITE_API_URL || "";
+const TOKEN_KEY = "finance.token";
+
+// ---- Auth token storage ------------------------------------------------------
+// The JWT is kept in localStorage and attached to every request. When a request
+// comes back 401 (expired/invalid session) we clear it and send the user to the
+// login screen.
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string | null): void {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+/** Fires when a request is rejected as unauthenticated so the app can log out. */
+export const AUTH_ERROR_EVENT = "finance:auth-error";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getToken();
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options?.headers,
+    },
   });
+
+  if (res.status === 401) {
+    // Session is gone/expired — drop the token and let the app react.
+    setToken(null);
+    window.dispatchEvent(new Event(AUTH_ERROR_EVENT));
+  }
 
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
@@ -36,7 +65,9 @@ export const api = {
   del: (path: string) => request<void>(path, { method: "DELETE" }),
 };
 
-/** Absolute URL for file-download endpoints (CSV / Excel). */
+/** Absolute URL for file-download endpoints (CSV / Excel). Includes the token. */
 export function downloadUrl(path: string): string {
-  return `${BASE}${path}`;
+  const token = getToken();
+  const sep = path.includes("?") ? "&" : "?";
+  return `${BASE}${path}${token ? `${sep}token=${encodeURIComponent(token)}` : ""}`;
 }

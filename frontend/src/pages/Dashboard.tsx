@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Wallet,
   Target,
@@ -9,10 +9,11 @@ import {
   ArrowUpRight,
   Banknote,
   Inbox,
+  AlertTriangle,
 } from "lucide-react";
 import { useFetch } from "../lib/useFetch";
-import type { DashboardData } from "../lib/types";
-import { currentMonth, formatCurrency, formatDate, cx } from "../lib/utils";
+import type { DashboardData, Budget } from "../lib/types";
+import { currentMonth, formatCurrency, formatDate, cx, budgetStatus } from "../lib/utils";
 import { PageHeader } from "../components/ui/PageHeader";
 import { MonthSwitcher } from "../components/ui/MonthSwitcher";
 import { StatCard } from "../components/ui/StatCard";
@@ -23,6 +24,12 @@ import { TrendChart } from "../components/charts/TrendChart";
 export function Dashboard() {
   const [month, setMonth] = useState(currentMonth());
   const { data, loading, error } = useFetch<DashboardData>(`/api/dashboard?month=${month}`);
+  const { data: budgets } = useFetch<Budget[]>(`/api/budgets?month=${month}`);
+
+  const overBudget = useMemo(
+    () => (budgets ?? []).filter((b) => budgetStatus(b.percentUsed) === "over"),
+    [budgets]
+  );
 
   return (
     <div>
@@ -33,6 +40,15 @@ export function Dashboard() {
       />
 
       {error && <ErrorBanner message={error} />}
+      {overBudget.length > 0 && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+          <span>
+            Over budget in{" "}
+            <span className="font-semibold">{overBudget.map((b) => b.category).join(", ")}</span> this month.
+          </span>
+        </div>
+      )}
       {loading && !data ? (
         <LoadingGrid />
       ) : data ? (

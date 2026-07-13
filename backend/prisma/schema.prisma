@@ -19,10 +19,11 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
 
-  expenses Expense[]
-  incomes  Income[]
-  budgets  Budget[]
-  debts    Debt[]
+  expenses   Expense[]
+  incomes    Income[]
+  budgets    Budget[]
+  debts      Debt[]
+  recurrings Recurring[]
 }
 
 /// A single spending record.
@@ -71,6 +72,35 @@ model Budget {
 
   @@unique([userId, month, category])
   @@index([userId, month])
+}
+
+/// A recurring transaction rule. Generates Expense or Income records on a
+/// schedule when materialized (see routes/recurring.ts). `nextRun` tracks the
+/// date of the next occurrence still to be created.
+model Recurring {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // type: "expense" | "income"
+  type          String   @default("expense")
+  // frequency: "weekly" | "monthly"
+  frequency     String   @default("monthly")
+  // For expenses: category + paymentMethod. For income: category holds the source.
+  category      String
+  description   String
+  amount        Float
+  paymentMethod String   @default("Cash")
+  notes         String?
+  startDate     DateTime
+  // Optional end date — no occurrences are generated after it.
+  endDate       DateTime?
+  // Date of the next occurrence to generate. Advances as records are created.
+  nextRun       DateTime
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, active])
 }
 
 /// Money owed — either the user owes someone, or someone owes the user.

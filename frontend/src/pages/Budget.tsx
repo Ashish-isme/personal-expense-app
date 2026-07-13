@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, PiggyBank } from "lucide-react";
+import { Plus, Pencil, Trash2, PiggyBank, AlertTriangle } from "lucide-react";
 import { useFetch } from "../lib/useFetch";
 import { api } from "../lib/api";
 import type { Budget as BudgetModel } from "../lib/types";
-import { currentMonth, formatCurrency, EXPENSE_CATEGORIES, cx } from "../lib/utils";
+import { currentMonth, formatCurrency, EXPENSE_CATEGORIES, cx, budgetStatus } from "../lib/utils";
 import { PageHeader } from "../components/ui/PageHeader";
 import { MonthSwitcher } from "../components/ui/MonthSwitcher";
 import { Button } from "../components/ui/Button";
@@ -11,6 +11,7 @@ import { Modal } from "../components/ui/Modal";
 import { FieldWrap, Input, Select } from "../components/ui/Field";
 import { ProgressBar } from "../components/ui/ProgressBar";
 import { StatCard } from "../components/ui/StatCard";
+import { Badge } from "../components/ui/Badge";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Target, TrendingDown, Banknote } from "lucide-react";
 
@@ -26,6 +27,11 @@ export function Budget() {
     const actual = budgets.reduce((s, b) => s + b.actual, 0);
     return { budget, actual, remaining: budget - actual };
   }, [data]);
+
+  const overBudget = useMemo(
+    () => (data ?? []).filter((b) => budgetStatus(b.percentUsed) === "over"),
+    [data]
+  );
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this budget?")) return;
@@ -53,6 +59,19 @@ export function Budget() {
         }
       />
 
+      {overBudget.length > 0 && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
+          <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+          <span>
+            You're over budget in{" "}
+            <span className="font-semibold">
+              {overBudget.map((b) => b.category).join(", ")}
+            </span>
+            . Consider adjusting your spending or raising the limit.
+          </span>
+        </div>
+      )}
+
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Total Budget" value={totals.budget} icon={Target} tone="brand" />
         <StatCard label="Total Spent" value={totals.actual} icon={TrendingDown} tone="negative" />
@@ -78,6 +97,11 @@ export function Budget() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {budgetStatus(b.percentUsed) === "over" ? (
+                    <Badge tone="red">Over budget</Badge>
+                  ) : budgetStatus(b.percentUsed) === "warning" ? (
+                    <Badge tone="amber">Near limit</Badge>
+                  ) : null}
                   <span
                     className={cx(
                       "text-sm font-semibold",
