@@ -35,6 +35,7 @@ async function main() {
     prisma.expense.deleteMany({ where: { userId } }),
     prisma.income.deleteMany({ where: { userId } }),
     prisma.budget.deleteMany({ where: { userId } }),
+    prisma.recurring.deleteMany({ where: { userId } }),
     prisma.category.deleteMany({ where: { userId } }),
     prisma.budgetAlert.deleteMany({ where: { userId } }),
     prisma.notification.deleteMany({ where: { userId } }),

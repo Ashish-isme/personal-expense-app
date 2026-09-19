@@ -215,3 +215,33 @@ export interface ReportData {
   expenses: Expense[];
   income: Income[];
 }
+
+// ---- Forecast ---------------------------------------------------------------
+
+export interface CategoryForecast {
+  category: string;
+  budget: number;
+  spent: number;
+  /** Recurring bills in this category still to come this month. */
+  upcoming: number;
+  /** What the forecast assumes this category will cost this month. */
+  planned: number;
+}
+
+export interface MonthForecast {
+  month: string;
+  label: string;
+  openingBalance: number;
+  income: { received: number; expected: number; total: number };
+  spending: { spent: number; remaining: number; planned: number; budget: number };
+  debts: { toReceive: number; toPay: number };
+  net: number;
+  closingBalance: number;
+  categories: CategoryForecast[];
+}
+
+export interface Forecast {
+  months: MonthForecast[];
+  /** Pending money owed with no due date. */
+  unscheduled: { toReceive: number; toPay: number };
+}
