@@ -7,9 +7,10 @@ import {
   formatCurrency,
   formatDate,
   toDateInput,
-  EXPENSE_CATEGORIES,
   PAYMENT_METHODS,
 } from "../lib/utils";
+import { useCategories } from "../lib/useCategories";
+import { CategorySelect } from "../components/ui/CategorySelect";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
@@ -198,6 +199,7 @@ function RecurringModal({ open, rule, onClose, onSaved }: RecurringModalProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [type, setType] = useState<RecurringType>(rule?.type ?? "expense");
+  const { names: categoryNames } = useCategories();
 
   // Keep the type toggle in sync when a different rule is opened for editing.
   const key = rule?.id ?? "new";
@@ -264,13 +266,7 @@ function RecurringModal({ open, rule, onClose, onSaved }: RecurringModalProps) {
             {type === "income" ? (
               <Input name="category" defaultValue={rule?.category ?? ""} placeholder="e.g. Salary" required />
             ) : (
-              <Select name="category" defaultValue={rule?.category ?? EXPENSE_CATEGORIES[0]}>
-                {EXPENSE_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
+              <CategorySelect name="category" options={categoryNames} defaultValue={rule?.category} />
             )}
           </FieldWrap>
           <FieldWrap label="Amount">

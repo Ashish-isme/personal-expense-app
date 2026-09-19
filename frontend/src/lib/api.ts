@@ -22,6 +22,13 @@ export function setToken(token: string | null): void {
 /** Fires when a request is rejected as unauthenticated so the app can log out. */
 export const AUTH_ERROR_EVENT = "finance:auth-error";
 
+/** Fires after an action that may have created notifications (e.g. a budget alert), so the bell refreshes. */
+export const NOTIFICATIONS_CHANGED_EVENT = "finance:notifications-changed";
+
+export function refreshNotifications(): void {
+  window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
+}
+
 /** An error response from the API. `status` is 0 when the server couldn't be reached. */
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {

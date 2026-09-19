@@ -1,16 +1,17 @@
 import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Receipt, Search, X } from "lucide-react";
 import { useFetch } from "../lib/useFetch";
-import { api } from "../lib/api";
+import { api, refreshNotifications } from "../lib/api";
 import type { Expense, PaymentMethod } from "../lib/types";
 import {
   currentMonth,
   formatCurrency,
   formatDate,
   toDateInput,
-  EXPENSE_CATEGORIES,
   PAYMENT_METHODS,
 } from "../lib/utils";
+import { useCategories } from "../lib/useCategories";
+import { CategorySelect } from "../components/ui/CategorySelect";
 import { PageHeader } from "../components/ui/PageHeader";
 import { MonthSwitcher } from "../components/ui/MonthSwitcher";
 import { Button } from "../components/ui/Button";
@@ -45,6 +46,7 @@ export function Expenses() {
   }, [month, search, category, minAmount, maxAmount]);
 
   const { data, loading, reload } = useFetch<Expense[]>(`/api/expenses?${query}`);
+  const { names: categoryNames, reload: reloadCategories } = useCategories();
   const [editing, setEditing] = useState<Expense | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -101,7 +103,7 @@ export function Expenses() {
         </div>
         <Select value={category} onChange={(e) => setCategory(e.target.value)} className="sm:w-40" aria-label="Filter by category">
           <option value="">All categories</option>
-          {EXPENSE_CATEGORIES.map((c) => (
+          {categoryNames.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
@@ -193,10 +195,12 @@ export function Expenses() {
         open={open}
         expense={editing}
         month={month}
+        categories={categoryNames}
         onClose={() => setOpen(false)}
         onSaved={() => {
           setOpen(false);
           reload();
+          reloadCategories();
         }}
       />
     </div>
@@ -232,12 +236,13 @@ interface ExpenseModalProps {
   open: boolean;
   expense: Expense | null;
   month: string;
+  categories: string[];
   onClose: () => void;
   onSaved: () => void;
 }
 
 /** Add / edit form for a single expense. */
-function ExpenseModal({ open, expense, month, onClose, onSaved }: ExpenseModalProps) {
+function ExpenseModal({ open, expense, month, categories, onClose, onSaved }: ExpenseModalProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -259,6 +264,8 @@ function ExpenseModal({ open, expense, month, onClose, onSaved }: ExpenseModalPr
     try {
       if (expense) await api.put(`/api/expenses/${expense.id}`, payload);
       else await api.post("/api/expenses", payload);
+      // Saving may have pushed a category over budget and created an alert.
+      refreshNotifications();
       onSaved();
     } catch (err) {
       setError((err as Error).message);
@@ -287,13 +294,7 @@ function ExpenseModal({ open, expense, month, onClose, onSaved }: ExpenseModalPr
 
         <div className="grid grid-cols-2 gap-3">
           <FieldWrap label="Category">
-            <Select name="category" defaultValue={expense?.category ?? EXPENSE_CATEGORIES[0]}>
-              {EXPENSE_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Select>
+            <CategorySelect name="category" options={categories} defaultValue={expense?.category} />
           </FieldWrap>
           <FieldWrap label="Payment Method">
             <Select name="paymentMethod" defaultValue={expense?.paymentMethod ?? "Cash"}>

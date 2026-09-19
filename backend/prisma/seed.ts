@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { STARTER_CATEGORIES } from "../src/lib/budgets.js";
 
 const prisma = new PrismaClient();
 
@@ -34,14 +35,13 @@ async function main() {
     prisma.expense.deleteMany({ where: { userId } }),
     prisma.income.deleteMany({ where: { userId } }),
     prisma.budget.deleteMany({ where: { userId } }),
+    prisma.category.deleteMany({ where: { userId } }),
+    prisma.budgetAlert.deleteMany({ where: { userId } }),
+    prisma.notification.deleteMany({ where: { userId } }),
     prisma.debt.deleteMany({ where: { userId } }),
   ]);
 
   const now = new Date();
-  const monthKey = (offset: number) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  };
   const dateIn = (offset: number, day: number) =>
     new Date(now.getFullYear(), now.getMonth() - offset, day);
 
@@ -90,17 +90,13 @@ async function main() {
   }
   await prisma.income.createMany({ data: income });
 
-  // Budgets for the current and previous month.
-  const budgetAmounts: Record<string, number> = {
+  // Categories with standing monthly goals (they apply to every month).
+  const monthlyGoals: Record<string, number> = {
     Groceries: 7000, Rent: 18000, Transport: 4000, Dining: 3500, Utilities: 3200, Entertainment: 2500, Health: 2000,
   };
-  const budgets = [];
-  for (const month of [monthKey(0), monthKey(1)]) {
-    for (const [category, amount] of Object.entries(budgetAmounts)) {
-      budgets.push({ userId, month, category, amount });
-    }
-  }
-  await prisma.budget.createMany({ data: budgets });
+  await prisma.category.createMany({
+    data: STARTER_CATEGORIES.map((name) => ({ userId, name, monthlyGoal: monthlyGoals[name] ?? null })),
+  });
 
   // A few debts in both directions.
   await prisma.debt.createMany({
@@ -112,7 +108,7 @@ async function main() {
     ],
   });
 
-  console.log(`✅ Seeded ${expenses.length} expenses, ${income.length} incomes, ${budgets.length} budgets, 4 debts.`);
+  console.log(`✅ Seeded ${expenses.length} expenses, ${income.length} incomes, ${STARTER_CATEGORIES.length} categories, 4 debts.`);
   console.log(`👤 Demo login →  ${DEMO_EMAIL}  /  ${DEMO_PASSWORD}`);
 }
 

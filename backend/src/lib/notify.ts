@@ -9,7 +9,12 @@ export type NotificationType =
   | "settlement_confirmed"
   | "settlement_declined"
   | "monthly_summary"
-  | "member_joined";
+  | "member_joined"
+  | "budget_warning"
+  | "budget_exceeded";
+
+/** Formats an amount the way the app displays money, e.g. "Rs 12,500". */
+export const money = (n: number) => `Rs ${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 interface NotifyInput {
   userIds: string[];
