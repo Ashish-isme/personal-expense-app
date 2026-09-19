@@ -1,9 +1,15 @@
 import { TrendingUp, Landmark, ArrowDownLeft, ArrowUpRight } from "lucide-react";
-import { useFetch } from "../lib/useFetch";
-import type { Forecast as ForecastData, MonthForecast } from "../lib/types";
-import { cx, formatCurrency } from "../lib/utils";
-import { PageHeader } from "../components/ui/PageHeader";
-import { StatCard } from "../components/ui/StatCard";
+import { useFetch } from "@/lib/useFetch";
+import type { Forecast as ForecastData, MonthForecast } from "@/lib/types";
+import { cn, formatCurrency } from "@/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PageHeader } from "@/components/app/PageHeader";
+import { StatCard } from "@/components/app/StatCard";
+import { FormError } from "@/components/app/FormField";
 
 const MONTHS_AHEAD = 3;
 
@@ -14,46 +20,57 @@ export function Forecast() {
   const last = data?.months[data.months.length - 1];
 
   return (
-    <div>
+    <>
       <PageHeader
         title="Forecast"
-        subtitle="Where your money is heading, from your budgets, recurring income and bills, and money owed"
+        description="Where your money is heading, from your budgets, recurring income and bills, and money owed"
       />
 
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      <FormError message={error} />
 
       {loading && !data ? (
-        <div className="card p-6 text-sm text-neutral-400">Loading…</div>
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {Array.from({ length: 4 }, (_, i) => (
+              <Skeleton key={i} className="h-24 rounded-xl" />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }, (_, i) => (
+              <Skeleton key={i} className="h-64 rounded-xl" />
+            ))}
+          </div>
+        </>
       ) : data && current && last ? (
         <>
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard
-              label={`End of ${current.label}`}
+              label={`End of ${current.label.slice(0, 3)}`}
               value={current.closingBalance}
               icon={TrendingUp}
-              tone={current.closingBalance >= 0 ? "brand" : "negative"}
-              hint="Projected balance"
+              tone={current.closingBalance >= 0 ? "default" : "negative"}
+              hint={`Projected, ${current.label}`}
             />
             <StatCard
-              label={`End of ${last.label}`}
+              label={`End of ${last.label.slice(0, 3)}`}
               value={last.closingBalance}
               icon={Landmark}
-              tone={last.closingBalance >= 0 ? "brand" : "negative"}
-              hint={`${MONTHS_AHEAD} months out`}
+              tone={last.closingBalance >= 0 ? "default" : "negative"}
+              hint={`${MONTHS_AHEAD} months out, ${last.label}`}
             />
             <StatCard
-              label="To receive, no due date"
+              label="To receive"
               value={data.unscheduled.toReceive}
               icon={ArrowDownLeft}
               tone="positive"
-              hint="Not placed in any month"
+              hint="No due date set"
             />
             <StatCard
-              label="To pay, no due date"
+              label="To pay"
               value={data.unscheduled.toPay}
               icon={ArrowUpRight}
               tone="negative"
-              hint="Not placed in any month"
+              hint="No due date set"
             />
           </div>
 
@@ -65,7 +82,7 @@ export function Forecast() {
 
           <CategoryTable month={current} />
 
-          <p className="mt-4 text-xs text-neutral-400">
+          <p className="text-muted-foreground text-xs leading-relaxed">
             How this is worked out: each category is planned at its budget, or at what you've already spent plus
             recurring bills still due if that's more. Income is what you've received plus recurring income still to
             come. Money owed counts in the month it's due; anything overdue counts this month. The starting balance is
@@ -73,18 +90,16 @@ export function Forecast() {
           </p>
         </>
       ) : null}
-    </div>
+    </>
   );
 }
 
 /** A line of the month breakdown. `muted` rows are indented sub-lines of the row above. */
 function Row({ label, value, sign, muted }: { label: string; value: number; sign: "+" | "−"; muted?: boolean }) {
   return (
-    <div
-      className={cx("flex justify-between text-sm", muted ? "pl-3 text-neutral-400" : "text-neutral-600 dark:text-neutral-300")}
-    >
+    <div className={cn("flex justify-between gap-2 text-sm", muted && "text-muted-foreground pl-3 text-xs")}>
       <span>{label}</span>
-      <span>
+      <span className="tabular">
         {sign} {formatCurrency(value)}
       </span>
     </div>
@@ -93,78 +108,87 @@ function Row({ label, value, sign, muted }: { label: string; value: number; sign
 
 function MonthCard({ month: m, current }: { month: MonthForecast; current: boolean }) {
   return (
-    <div className={cx("card p-4", current && "ring-1 ring-brand/40")}>
-      <div className="mb-3 flex items-baseline justify-between">
-        <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">{m.label}</p>
-        {current && <span className="text-xs text-brand">This month</span>}
+    <Card className={cn("gap-3 p-4 shadow-none", current && "border-primary/40 ring-primary/15 ring-2")}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-medium">{m.label}</p>
+        {current && <Badge variant="secondary">This month</Badge>}
       </div>
 
-      <div className="flex justify-between text-sm text-neutral-400">
+      <div className="text-muted-foreground flex justify-between text-sm">
         <span>Starting balance</span>
-        <span>{formatCurrency(m.openingBalance)}</span>
+        <span className="tabular">{formatCurrency(m.openingBalance)}</span>
       </div>
 
-      <div className="my-2 space-y-1 border-y border-neutral-100 py-2 dark:border-neutral-800">
+      <Separator />
+
+      <div className="space-y-1.5">
         <Row label="Income" value={m.income.total} sign="+" />
-        {current && m.income.expected > 0 && (
-          <Row label="still to come" value={m.income.expected} sign="+" muted />
-        )}
+        {current && m.income.expected > 0 && <Row label="still to come" value={m.income.expected} sign="+" muted />}
         <Row label="Planned spending" value={m.spending.planned} sign="−" />
         {current && <Row label="still to spend" value={m.spending.remaining} sign="−" muted />}
         <Row label="Money to receive" value={m.debts.toReceive} sign="+" />
         <Row label="Money to pay" value={m.debts.toPay} sign="−" />
       </div>
 
-      <div className="flex justify-between text-sm">
-        <span className="text-neutral-500 dark:text-neutral-400">Month result</span>
-        <span className={cx("font-medium", m.net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
-          {m.net >= 0 ? "+" : "−"} {formatCurrency(Math.abs(m.net))}
-        </span>
+      <Separator />
+
+      <div className="space-y-1">
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Month result</span>
+          <span className={cn("tabular font-medium", m.net >= 0 ? "text-positive" : "text-destructive")}>
+            {m.net >= 0 ? "+" : "−"} {formatCurrency(Math.abs(m.net))}
+          </span>
+        </div>
+        <div className="flex items-baseline justify-between">
+          <span className="text-sm font-medium">End balance</span>
+          <span className={cn("tabular text-lg font-semibold", m.closingBalance < 0 && "text-destructive")}>
+            {formatCurrency(m.closingBalance)}
+          </span>
+        </div>
       </div>
-      <div className="mt-1 flex justify-between">
-        <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">End balance</span>
-        <span
-          className={cx(
-            "text-base font-semibold",
-            m.closingBalance >= 0 ? "text-neutral-800 dark:text-neutral-100" : "text-red-600 dark:text-red-400"
-          )}
-        >
-          {formatCurrency(m.closingBalance)}
-        </span>
-      </div>
-    </div>
+    </Card>
   );
 }
 
 function CategoryTable({ month }: { month: MonthForecast }) {
   if (!month.categories.length) return null;
   return (
-    <div className="card mt-4 overflow-x-auto p-4">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100">{month.label} by category</h2>
-      <table className="w-full min-w-[480px] text-sm">
-        <thead>
-          <tr className="text-left text-xs text-neutral-400">
-            <th className="pb-2 font-medium">Category</th>
-            <th className="pb-2 text-right font-medium">Budget</th>
-            <th className="pb-2 text-right font-medium">Spent</th>
-            <th className="pb-2 text-right font-medium">Bills due</th>
-            <th className="pb-2 text-right font-medium">Planned</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-          {month.categories.map((c) => (
-            <tr key={c.category} className="text-neutral-600 dark:text-neutral-300">
-              <td className="py-1.5">{c.category}</td>
-              <td className="py-1.5 text-right">{c.budget ? formatCurrency(c.budget) : "—"}</td>
-              <td className={cx("py-1.5 text-right", c.budget > 0 && c.spent > c.budget && "text-red-600 dark:text-red-400")}>
-                {formatCurrency(c.spent)}
-              </td>
-              <td className="py-1.5 text-right">{c.upcoming ? formatCurrency(c.upcoming) : "—"}</td>
-              <td className="py-1.5 text-right font-medium">{formatCurrency(c.planned)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Card className="gap-0 overflow-hidden pb-0 shadow-none">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base">{month.label} by category</CardTitle>
+      </CardHeader>
+      <CardContent className="px-0">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="pl-6">Category</TableHead>
+              <TableHead className="text-right">Budget</TableHead>
+              <TableHead className="text-right">Spent</TableHead>
+              <TableHead className="hidden text-right sm:table-cell">Bills due</TableHead>
+              <TableHead className="pr-6 text-right">Planned</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {month.categories.map((c) => (
+              <TableRow key={c.category}>
+                <TableCell className="pl-6 font-medium">{c.category}</TableCell>
+                <TableCell className="text-muted-foreground tabular text-right">
+                  {c.budget ? formatCurrency(c.budget) : "—"}
+                </TableCell>
+                <TableCell
+                  className={cn("tabular text-right", c.budget > 0 && c.spent > c.budget && "text-destructive")}
+                >
+                  {formatCurrency(c.spent)}
+                </TableCell>
+                <TableCell className="text-muted-foreground tabular hidden text-right sm:table-cell">
+                  {c.upcoming ? formatCurrency(c.upcoming) : "—"}
+                </TableCell>
+                <TableCell className="tabular pr-6 text-right font-medium">{formatCurrency(c.planned)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }

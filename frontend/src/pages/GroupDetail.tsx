@@ -1,30 +1,41 @@
 import { useMemo, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import {
-  Plus, ArrowLeft, Copy, Check, Trash2, Receipt, HandCoins, Users, LogOut,
-} from "lucide-react";
-import { useFetch } from "../lib/useFetch";
-import { api } from "../lib/api";
-import { useAuth } from "../context/AuthContext";
-import type { GroupDetail as GroupDetailModel, SplitMode, User } from "../lib/types";
-import { formatCurrency, formatDate, toDateInput, cx } from "../lib/utils";
-import { PageHeader } from "../components/ui/PageHeader";
-import { Button } from "../components/ui/Button";
-import { Modal } from "../components/ui/Modal";
-import { FieldWrap, Input, Select, Textarea } from "../components/ui/Field";
-import { Badge } from "../components/ui/Badge";
-import { EmptyState } from "../components/ui/EmptyState";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { Plus, ArrowLeft, Copy, Check, Trash2, Receipt, Users, LogOut } from "lucide-react";
+import { toast } from "sonner";
+import { useFetch } from "@/lib/useFetch";
+import { api } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import type { GroupDetail as GroupDetailModel, SplitMode, User } from "@/lib/types";
+import { cn, formatCurrency, formatDate, toDateInput } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PageHeader } from "@/components/app/PageHeader";
+import { EmptyState } from "@/components/app/EmptyState";
+import { FormError, FormField } from "@/components/app/FormField";
+import { RowActions } from "@/components/app/RowActions";
+import { ListSkeleton } from "@/components/app/ListSkeleton";
+import { useConfirm } from "@/components/app/ConfirmProvider";
 
 const nameOf = (u: User) => u.name || u.email;
+
+/** Green for money coming to you, red for money you owe, muted when settled. */
+const netClass = (n: number) => (n > 0 ? "text-positive" : n < 0 ? "text-destructive" : "text-muted-foreground");
 
 export function GroupDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const confirm = useConfirm();
   const { data, loading, error, reload } = useFetch<GroupDetailModel>(`/api/groups/${id}`);
   const [addOpen, setAddOpen] = useState(false);
   const [settleWith, setSettleWith] = useState<{ userId: string; name: string; amount: number } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
 
   const me = user?.id;
 
@@ -42,6 +53,7 @@ export function GroupDetail() {
     () => (data?.settlements ?? []).filter((s) => s.status === "pending" && s.fromUserId === me),
     [data, me]
   );
+  const history = useMemo(() => (data?.settlements ?? []).filter((s) => s.status !== "pending"), [data]);
 
   const myNet = data?.balances.find((b) => b.userId === me)?.net ?? 0;
 
@@ -49,297 +61,310 @@ export function GroupDetail() {
     if (!data) return;
     navigator.clipboard.writeText(data.inviteCode);
     setCopied(true);
+    toast.success("Invite code copied");
     setTimeout(() => setCopied(false), 1500);
   };
 
   const respond = async (settlementId: string, action: "confirm" | "decline") => {
-    setActionError(null);
     try {
       await api.patch(`/api/groups/${id}/settlements/${settlementId}`, { action });
+      toast.success(action === "confirm" ? "Payment confirmed" : "Payment declined");
       reload();
     } catch (err) {
-      setActionError((err as Error).message);
+      toast.error((err as Error).message);
     }
   };
 
-  const deleteExpense = async (expenseId: string) => {
-    if (!confirm("Delete this expense? Balances will be recalculated.")) return;
-    setActionError(null);
+  const deleteExpense = async (expenseId: string, description: string) => {
+    const ok = await confirm({ title: "Delete this expense?", description: `${description} — balances will be recalculated.` });
+    if (!ok) return;
     try {
       await api.del(`/api/groups/${id}/expenses/${expenseId}`);
+      toast.success("Expense deleted");
       reload();
     } catch (err) {
-      setActionError((err as Error).message);
+      toast.error((err as Error).message);
     }
   };
 
   const leave = async () => {
-    if (!confirm("Leave this group?")) return;
-    setActionError(null);
+    const ok = await confirm({ title: "Leave this group?", description: "You can only leave once you're settled up.", confirmLabel: "Leave" });
+    if (!ok) return;
     try {
       await api.post(`/api/groups/${id}/leave`, {});
-      window.location.href = "/groups";
+      toast.success("You left the group");
+      navigate("/groups");
     } catch (err) {
-      setActionError((err as Error).message);
+      toast.error((err as Error).message);
     }
   };
 
-  if (loading && !data) return <div className="card p-6 text-sm text-neutral-400">Loading…</div>;
-  if (error) return <div className="card p-6 text-sm text-red-600">{error}</div>;
+  if (loading && !data) {
+    return (
+      <Card className="py-0">
+        <ListSkeleton />
+      </Card>
+    );
+  }
+  if (error) {
+    return (
+      <Card className="text-destructive p-6 text-sm">{error}</Card>
+    );
+  }
   if (!data) return null;
 
   return (
-    <div>
-      <Link to="/groups" className="mb-3 inline-flex items-center gap-1.5 text-sm text-neutral-400 hover:text-brand">
-        <ArrowLeft size={15} /> All groups
-      </Link>
-
-      <PageHeader
-        title={data.name}
-        subtitle={
-          myNet > 0
-            ? `Overall, you're owed ${formatCurrency(myNet)}`
-            : myNet < 0
-              ? `Overall, you owe ${formatCurrency(Math.abs(myNet))}`
-              : "You're all settled up"
-        }
-        actions={
-          <>
-            <button
-              onClick={copyCode}
-              title="Copy invite code"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 px-3 py-2 font-mono text-xs tracking-widest text-neutral-600 transition hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-              {data.inviteCode}
-            </button>
-            <Button onClick={() => setAddOpen(true)}>
-              <Plus size={16} /> Add Expense
-            </Button>
-          </>
-        }
-      />
-
-      {actionError && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400">
-          {actionError}
-        </div>
-      )}
+    <>
+      <div className="space-y-3">
+        <Button variant="ghost" size="sm" asChild className="text-muted-foreground -ml-2">
+          <Link to="/groups">
+            <ArrowLeft /> All groups
+          </Link>
+        </Button>
+        <PageHeader
+          title={data.name}
+          description={
+            myNet > 0
+              ? `Overall, you're owed ${formatCurrency(myNet)}`
+              : myNet < 0
+                ? `Overall, you owe ${formatCurrency(Math.abs(myNet))}`
+                : "You're all settled up"
+          }
+          actions={
+            <>
+              <Button variant="outline" onClick={copyCode} title="Copy invite code" className="font-mono tracking-widest">
+                {copied ? <Check className="text-positive" /> : <Copy />}
+                {data.inviteCode}
+              </Button>
+              <Button onClick={() => setAddOpen(true)}>
+                <Plus /> Add expense
+              </Button>
+            </>
+          }
+        />
+      </div>
 
       {/* Payments waiting on MY confirmation */}
       {awaitingMyConfirmation.length > 0 && (
-        <div className="card mb-4 border-amber-300 p-4 dark:border-amber-500/40">
-          <h2 className="mb-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100">
-            Waiting for your confirmation
-          </h2>
-          <ul className="space-y-2">
+        <Card className="border-warning/50 gap-3 py-4 shadow-none">
+          <CardHeader className="px-4">
+            <CardTitle className="text-sm">Waiting for your confirmation</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 px-4">
             {awaitingMyConfirmation.map((s) => (
-              <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2 dark:bg-amber-500/10">
-                <span className="text-sm text-neutral-700 dark:text-neutral-200">
-                  <span className="font-semibold">{nameOf(s.fromUser)}</span> says they paid you{" "}
-                  <span className="font-semibold">{formatCurrency(s.amount)}</span>
-                  {s.note && <span className="block text-xs text-neutral-400">“{s.note}”</span>}
-                </span>
-                <span className="flex gap-2">
+              <div key={s.id} className="bg-warning/10 flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-2.5">
+                <div className="text-sm">
+                  <span className="font-medium">{nameOf(s.fromUser)}</span> says they paid you{" "}
+                  <span className="tabular font-medium">{formatCurrency(s.amount)}</span>
+                  {s.note && <p className="text-muted-foreground text-xs">“{s.note}”</p>}
+                </div>
+                <div className="flex gap-2">
                   <Button size="sm" onClick={() => respond(s.id, "confirm")}>
-                    <Check size={14} /> Received
+                    <Check /> Received
                   </Button>
-                  <Button size="sm" variant="secondary" onClick={() => respond(s.id, "decline")}>
+                  <Button size="sm" variant="outline" onClick={() => respond(s.id, "decline")}>
                     Decline
                   </Button>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Settle up */}
-      <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <div className="card p-4">
-          <h2 className="mb-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100">You owe</h2>
-          {iOwe.length ? (
-            <ul className="space-y-2">
-              {iOwe.map((t) => {
-                const pending = awaitingTheirConfirmation.find((s) => s.toUserId === t.toUserId);
-                return (
-                  <li key={t.toUserId} className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-neutral-700 dark:text-neutral-200">
-                      <span className="font-semibold">{t.toName}</span>{" "}
-                      <span className="text-red-600 dark:text-red-400">{formatCurrency(t.amount)}</span>
-                    </span>
-                    {pending ? (
-                      <Badge tone="amber">Awaiting confirmation</Badge>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setSettleWith({ userId: t.toUserId, name: t.toName, amount: t.amount })}
-                      >
-                        Mark as paid
-                      </Button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="text-sm text-neutral-400">You don't owe anyone in this group.</p>
-          )}
-          {awaitingTheirConfirmation.length > 0 && (
-            <p className="mt-3 text-xs text-neutral-400">
-              Payments you've marked stay pending until the other person confirms they received them.
-            </p>
-          )}
-        </div>
-
-        <div className="card p-4">
-          <h2 className="mb-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100">You're owed</h2>
-          {owedToMe.length ? (
-            <ul className="space-y-2">
-              {owedToMe.map((t) => (
-                <li key={t.fromUserId} className="flex items-center justify-between gap-2">
-                  <span className="text-sm text-neutral-700 dark:text-neutral-200">
-                    <span className="font-semibold">{t.fromName}</span>{" "}
-                    <span className="text-emerald-600 dark:text-emerald-400">{formatCurrency(t.amount)}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-neutral-400">Nobody owes you in this group.</p>
-          )}
-        </div>
-      </div>
-
-      {/* Members & balances */}
-      <div className="card mb-4 p-4">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-neutral-800 dark:text-neutral-100">
-          <Users size={15} /> Members
-        </h2>
-        <ul className="divide-y divide-neutral-100 dark:divide-neutral-800">
-          {data.balances.map((b) => (
-            <li key={b.userId} className="flex items-center justify-between py-2">
-              <div>
-                <p className="text-sm font-medium text-neutral-800 dark:text-neutral-100">
-                  {b.name || b.email} {b.userId === me && <span className="text-xs text-neutral-400">(you)</span>}
-                </p>
-                <p className="text-xs text-neutral-400">
-                  paid {formatCurrency(b.paid)} · share {formatCurrency(b.owed)}
-                </p>
+                </div>
               </div>
-              <span
-                className={cx(
-                  "text-sm font-semibold",
-                  b.net > 0
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : b.net < 0
-                      ? "text-red-600 dark:text-red-400"
-                      : "text-neutral-400"
-                )}
-              >
-                {b.net > 0 ? `+${formatCurrency(b.net)}` : b.net < 0 ? `−${formatCurrency(Math.abs(b.net))}` : "settled"}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <button onClick={leave} className="mt-3 inline-flex items-center gap-1.5 text-xs text-neutral-400 hover:text-red-600">
-          <LogOut size={13} /> Leave group
-        </button>
-      </div>
-
-      {/* Expenses */}
-      <div className="card overflow-hidden">
-        <h2 className="border-b border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-800 dark:border-neutral-800 dark:text-neutral-100">
-          Expenses
-        </h2>
-        {data.expenses.length ? (
-          <ul className="divide-y divide-neutral-100 dark:divide-neutral-800">
-            {data.expenses.map((e) => {
-              const myShare = e.splits.find((s) => s.userId === me)?.amount ?? 0;
-              const iPaid = e.paidById === me;
-              return (
-                <li key={e.id} className="group px-4 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-neutral-800 dark:text-neutral-100">{e.description}</p>
-                      <p className="mt-0.5 text-xs text-neutral-400">
-                        {iPaid ? "You" : nameOf(e.paidBy)} paid {formatCurrency(e.amount)} · {formatDate(e.date)} ·{" "}
-                        <span className="capitalize">{e.splitMode}</span> split
-                      </p>
-                      <p className="mt-1 text-xs text-neutral-400">
-                        {e.splits.map((s) => `${s.userId === me ? "You" : nameOf(s.user)} ${formatCurrency(s.amount)}`).join(" · ")}
-                      </p>
-                      {e.notes && <p className="mt-1 text-xs italic text-neutral-400">{e.notes}</p>}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span
-                        className={cx(
-                          "text-sm font-semibold",
-                          iPaid ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
-                        )}
-                      >
-                        {iPaid ? `+${formatCurrency(e.amount - myShare)}` : `−${formatCurrency(myShare)}`}
-                      </span>
-                      <button
-                        onClick={() => deleteExpense(e.id)}
-                        aria-label="Delete expense"
-                        className="rounded-md p-1.5 text-neutral-300 opacity-0 transition hover:bg-neutral-100 hover:text-red-600 group-hover:opacity-100 dark:hover:bg-neutral-700"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <EmptyState
-            icon={Receipt}
-            title="No shared expenses yet"
-            description="Add the first one — say who paid and who it should be split between."
-          />
-        )}
-      </div>
-
-      {/* Settlement history */}
-      {data.settlements.filter((s) => s.status !== "pending").length > 0 && (
-        <div className="card mt-4 p-4">
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-neutral-800 dark:text-neutral-100">
-            <HandCoins size={15} /> Payment history
-          </h2>
-          <ul className="divide-y divide-neutral-100 dark:divide-neutral-800">
-            {data.settlements
-              .filter((s) => s.status !== "pending")
-              .map((s) => (
-                <li key={s.id} className="flex items-center justify-between py-2">
-                  <span className="text-sm text-neutral-700 dark:text-neutral-200">
-                    {s.fromUserId === me ? "You" : nameOf(s.fromUser)} paid{" "}
-                    {s.toUserId === me ? "you" : nameOf(s.toUser)} {formatCurrency(s.amount)}
-                  </span>
-                  <Badge tone={s.status === "confirmed" ? "green" : "red"}>
-                    {s.status === "confirmed" ? "Done" : "Declined"}
-                  </Badge>
-                </li>
-              ))}
-          </ul>
-        </div>
+            ))}
+          </CardContent>
+        </Card>
       )}
 
-      <AddExpenseModal
+      <Tabs defaultValue="balances" className="gap-4">
+        <TabsList>
+          <TabsTrigger value="balances">Balances</TabsTrigger>
+          <TabsTrigger value="expenses">Expenses ({data.expenses.length})</TabsTrigger>
+          {history.length > 0 && <TabsTrigger value="history">History</TabsTrigger>}
+        </TabsList>
+
+        <TabsContent value="balances" className="space-y-4">
+          {/* Settle up */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card className="gap-3 py-4 shadow-none">
+              <CardHeader className="px-4">
+                <CardTitle className="text-sm">You owe</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4">
+                {iOwe.length ? (
+                  <ul className="space-y-2">
+                    {iOwe.map((t) => {
+                      const pending = awaitingTheirConfirmation.find((s) => s.toUserId === t.toUserId);
+                      return (
+                        <li key={t.toUserId} className="flex items-center justify-between gap-2">
+                          <span className="text-sm">
+                            <span className="font-medium">{t.toName}</span>{" "}
+                            <span className="tabular text-destructive">{formatCurrency(t.amount)}</span>
+                          </span>
+                          {pending ? (
+                            <Badge variant="outline" className="border-warning/50 text-warning">
+                              Awaiting confirmation
+                            </Badge>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setSettleWith({ userId: t.toUserId, name: t.toName, amount: t.amount })}
+                            >
+                              Mark as paid
+                            </Button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground text-sm">You don't owe anyone in this group.</p>
+                )}
+                {awaitingTheirConfirmation.length > 0 && (
+                  <p className="text-muted-foreground mt-3 text-xs">
+                    Payments you've marked stay pending until the other person confirms they received them.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="gap-3 py-4 shadow-none">
+              <CardHeader className="px-4">
+                <CardTitle className="text-sm">You're owed</CardTitle>
+              </CardHeader>
+              <CardContent className="px-4">
+                {owedToMe.length ? (
+                  <ul className="space-y-2">
+                    {owedToMe.map((t) => (
+                      <li key={t.fromUserId} className="text-sm">
+                        <span className="font-medium">{t.fromName}</span>{" "}
+                        <span className="tabular text-positive">{formatCurrency(t.amount)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted-foreground text-sm">Nobody owes you in this group.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Members & balances */}
+          <Card className="gap-3 py-4 shadow-none">
+            <CardHeader className="items-center px-4">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Users className="size-4" /> Members
+              </CardTitle>
+              <CardAction className="self-center">
+                <Button variant="ghost" size="xs" onClick={leave} className="text-muted-foreground hover:text-destructive">
+                  <LogOut /> Leave group
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="px-4">
+              <ul className="divide-y">
+                {data.balances.map((b) => (
+                  <li key={b.userId} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {b.name || b.email} {b.userId === me && <span className="text-muted-foreground text-xs font-normal">(you)</span>}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        paid {formatCurrency(b.paid)} · share {formatCurrency(b.owed)}
+                      </p>
+                    </div>
+                    <span className={cn("tabular shrink-0 text-sm font-medium", netClass(b.net))}>
+                      {b.net > 0 ? `+${formatCurrency(b.net)}` : b.net < 0 ? `−${formatCurrency(Math.abs(b.net))}` : "settled"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="expenses">
+          <Card className="gap-0 overflow-hidden py-0 shadow-none">
+            {data.expenses.length ? (
+              <ul className="divide-y">
+                {data.expenses.map((e) => {
+                  const myShare = e.splits.find((s) => s.userId === me)?.amount ?? 0;
+                  const iPaid = e.paidById === me;
+                  return (
+                    <li key={e.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{e.description}</p>
+                        <p className="text-muted-foreground mt-0.5 text-xs">
+                          {iPaid ? "You" : nameOf(e.paidBy)} paid {formatCurrency(e.amount)} · {formatDate(e.date)} ·{" "}
+                          <span className="capitalize">{e.splitMode}</span> split
+                        </p>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          {e.splits.map((s) => `${s.userId === me ? "You" : nameOf(s.user)} ${formatCurrency(s.amount)}`).join(" · ")}
+                        </p>
+                        {e.notes && <p className="text-muted-foreground mt-1 text-xs italic">{e.notes}</p>}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <span className={cn("tabular text-sm font-medium", iPaid ? "text-positive" : "text-destructive")}>
+                          {iPaid ? `+${formatCurrency(e.amount - myShare)}` : `−${formatCurrency(myShare)}`}
+                        </span>
+                        <RowActions
+                          actions={[
+                            { label: "Delete", icon: Trash2, onSelect: () => deleteExpense(e.id, e.description), destructive: true },
+                          ]}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <EmptyState
+                icon={Receipt}
+                title="No shared expenses yet"
+                description="Add the first one — say who paid and who it should be split between."
+                action={
+                  <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+                    <Plus /> Add expense
+                  </Button>
+                }
+              />
+            )}
+          </Card>
+        </TabsContent>
+
+        {history.length > 0 && (
+          <TabsContent value="history">
+            <Card className="gap-0 py-0 shadow-none">
+              <ul className="divide-y">
+                {history.map((s) => (
+                  <li key={s.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <span className="text-sm">
+                      {s.fromUserId === me ? "You" : nameOf(s.fromUser)} paid {s.toUserId === me ? "you" : nameOf(s.toUser)}{" "}
+                      <span className="tabular font-medium">{formatCurrency(s.amount)}</span>
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={s.status === "confirmed" ? "border-positive/40 text-positive" : "border-destructive/40 text-destructive"}
+                    >
+                      {s.status === "confirmed" ? "Done" : "Declined"}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </TabsContent>
+        )}
+      </Tabs>
+
+      <AddExpenseDialog
         open={addOpen}
         group={data}
         currentUserId={me!}
-        onClose={() => setAddOpen(false)}
+        onOpenChange={setAddOpen}
         onSaved={() => {
           setAddOpen(false);
           reload();
         }}
       />
 
-      <SettleModal
-        open={!!settleWith}
+      <SettleDialog
         groupId={id!}
         target={settleWith}
         onClose={() => setSettleWith(null)}
@@ -348,21 +373,23 @@ export function GroupDetail() {
           reload();
         }}
       />
-    </div>
+    </>
   );
 }
 
 // ---- Add expense -------------------------------------------------------------
 
-interface AddExpenseModalProps {
+interface AddExpenseDialogProps {
   open: boolean;
   group: GroupDetailModel;
   currentUserId: string;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }
 
-function AddExpenseModal({ open, group, currentUserId, onClose, onSaved }: AddExpenseModalProps) {
+const SPLIT_LABELS: Record<SplitMode, string> = { equal: "Equally", custom: "Exact amounts", percent: "Percentage" };
+
+function AddExpenseDialog({ open, group, currentUserId, onOpenChange, onSaved }: AddExpenseDialogProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [splitMode, setSplitMode] = useState<SplitMode>("equal");
@@ -412,6 +439,7 @@ function AddExpenseModal({ open, group, currentUserId, onClose, onSaved }: AddEx
     setError(null);
     try {
       await api.post(`/api/groups/${group.id}/expenses`, payload);
+      toast.success("Shared expense added");
       // Reset for the next entry.
       setAmount("");
       setValues({});
@@ -429,150 +457,152 @@ function AddExpenseModal({ open, group, currentUserId, onClose, onSaved }: AddEx
   const equalShare = selected.length > 0 ? total / selected.length : 0;
 
   return (
-    <Modal open={open} title="Add Shared Expense" onClose={onClose}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit(e.currentTarget);
-        }}
-        className="space-y-4"
-      >
-        <div className="grid grid-cols-2 gap-3">
-          <FieldWrap label="Amount">
-            <Input
-              type="number"
-              name="amount"
-              min="0"
-              step="0.01"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0"
-              required
-            />
-          </FieldWrap>
-          <FieldWrap label="Date">
-            <Input type="date" name="date" defaultValue={toDateInput(new Date())} required />
-          </FieldWrap>
-        </div>
-
-        <FieldWrap label="Description">
-          <Input name="description" placeholder="e.g. Dinner at Roadhouse" required />
-        </FieldWrap>
-
-        <FieldWrap label="Paid by">
-          <Select name="paidById" defaultValue={currentUserId}>
-            {group.members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.id === currentUserId ? "You" : nameOf(m)}
-              </option>
-            ))}
-          </Select>
-        </FieldWrap>
-
-        {/* Split mode */}
-        <div>
-          <label className="label">Split</label>
-          <div className="flex gap-1 rounded-lg border border-neutral-300 p-1 dark:border-neutral-700">
-            {(["equal", "custom", "percent"] as SplitMode[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setSplitMode(m)}
-                className={cx(
-                  "flex-1 rounded-md px-2 py-1.5 text-xs font-medium capitalize transition",
-                  splitMode === m
-                    ? "bg-brand text-white"
-                    : "text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                )}
-              >
-                {m === "custom" ? "Exact amounts" : m === "percent" ? "Percentage" : "Equally"}
-              </button>
-            ))}
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) setError(null);
+        onOpenChange(o);
+      }}
+    >
+      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add shared expense</DialogTitle>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit(e.currentTarget);
+          }}
+          className="grid gap-4"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Amount" htmlFor="g-amount">
+              <Input
+                id="g-amount"
+                type="number"
+                inputMode="decimal"
+                name="amount"
+                min="0"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0"
+                required
+              />
+            </FormField>
+            <FormField label="Date" htmlFor="g-date">
+              <Input id="g-date" type="date" name="date" defaultValue={toDateInput(new Date())} required />
+            </FormField>
           </div>
-        </div>
 
-        {/* Participants */}
-        <div>
-          <label className="label">Split between</label>
-          <ul className="space-y-1.5 rounded-lg border border-neutral-200 p-2 dark:border-neutral-800">
-            {group.members.map((m) => {
-              const isOn = selected.includes(m.id);
-              return (
-                <li key={m.id} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={isOn}
-                    onChange={() => toggleMember(m.id)}
-                    id={`p-${m.id}`}
-                    className="h-4 w-4 rounded border-neutral-300 text-brand focus:ring-brand"
-                  />
-                  <label htmlFor={`p-${m.id}`} className="flex-1 truncate text-sm text-neutral-700 dark:text-neutral-200">
-                    {m.id === currentUserId ? "You" : nameOf(m)}
-                  </label>
+          <FormField label="Description" htmlFor="g-description">
+            <Input id="g-description" name="description" placeholder="e.g. Dinner at Roadhouse" required />
+          </FormField>
 
-                  {isOn && splitMode === "equal" && (
-                    <span className="text-xs text-neutral-400">{formatCurrency(equalShare)}</span>
-                  )}
-                  {isOn && splitMode !== "equal" && (
-                    <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
-                        min="0"
-                        step={splitMode === "percent" ? "0.01" : "0.01"}
-                        value={values[m.id] ?? ""}
-                        onChange={(e) => setValues((v) => ({ ...v, [m.id]: e.target.value }))}
-                        placeholder="0"
-                        className="w-24 py-1 text-sm"
-                      />
-                      <span className="w-3 text-xs text-neutral-400">{splitMode === "percent" ? "%" : ""}</span>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <FormField label="Paid by" htmlFor="g-paidBy">
+            <NativeSelect id="g-paidBy" name="paidById" defaultValue={currentUserId}>
+              {group.members.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id === currentUserId ? "You" : nameOf(m)}
+                </option>
+              ))}
+            </NativeSelect>
+          </FormField>
 
-          {/* Live reconciliation hint */}
-          {splitMode !== "equal" && (
-            <p className={cx("mt-1.5 text-xs", mismatch ? "text-red-600" : "text-neutral-400")}>
-              {splitMode === "custom"
-                ? `Shares total ${formatCurrency(enteredSum)} of ${formatCurrency(total)}`
-                : `Percentages total ${Number(enteredSum.toFixed(2))}% of 100%`}
-              {mismatch && " — these must match before you can save."}
-            </p>
-          )}
-        </div>
+          <FormField label="Split">
+            <Tabs value={splitMode} onValueChange={(v) => setSplitMode(v as SplitMode)}>
+              <TabsList className="w-full">
+                {(["equal", "custom", "percent"] as SplitMode[]).map((m) => (
+                  <TabsTrigger key={m} value={m} className="text-xs">
+                    {SPLIT_LABELS[m]}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </FormField>
 
-        <FieldWrap label="Notes (optional)">
-          <Textarea name="notes" placeholder="Any extra details…" />
-        </FieldWrap>
+          <FormField label="Split between">
+            <ul className="divide-y rounded-md border">
+              {group.members.map((m) => {
+                const isOn = selected.includes(m.id);
+                return (
+                  <li key={m.id} className="flex min-h-11 items-center gap-2 px-3 py-1.5">
+                    <input
+                      type="checkbox"
+                      checked={isOn}
+                      onChange={() => toggleMember(m.id)}
+                      id={`p-${m.id}`}
+                      className="accent-primary size-4"
+                    />
+                    <label htmlFor={`p-${m.id}`} className="flex-1 truncate text-sm">
+                      {m.id === currentUserId ? "You" : nameOf(m)}
+                    </label>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+                    {isOn && splitMode === "equal" && (
+                      <span className="tabular text-muted-foreground text-xs">{formatCurrency(equalShare)}</span>
+                    )}
+                    {isOn && splitMode !== "equal" && (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          value={values[m.id] ?? ""}
+                          onChange={(e) => setValues((v) => ({ ...v, [m.id]: e.target.value }))}
+                          placeholder="0"
+                          className="h-8 w-24"
+                          aria-label={`Share for ${m.id === currentUserId ? "you" : nameOf(m)}`}
+                        />
+                        <span className="text-muted-foreground w-3 text-xs">{splitMode === "percent" ? "%" : ""}</span>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={saving || mismatch || selected.length === 0}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+            {/* Live reconciliation hint */}
+            {splitMode !== "equal" && (
+              <p className={cn("text-xs", mismatch ? "text-destructive" : "text-muted-foreground")}>
+                {splitMode === "custom"
+                  ? `Shares total ${formatCurrency(enteredSum)} of ${formatCurrency(total)}`
+                  : `Percentages total ${Number(enteredSum.toFixed(2))}% of 100%`}
+                {mismatch && " — these must match before you can save."}
+              </p>
+            )}
+          </FormField>
+
+          <FormField label="Notes (optional)" htmlFor="g-notes">
+            <Textarea id="g-notes" name="notes" placeholder="Any extra details…" rows={2} />
+          </FormField>
+
+          <FormError message={error} />
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving || mismatch || selected.length === 0}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 // ---- Settle up ---------------------------------------------------------------
 
-interface SettleModalProps {
-  open: boolean;
+interface SettleDialogProps {
   groupId: string;
   target: { userId: string; name: string; amount: number } | null;
   onClose: () => void;
   onSaved: () => void;
 }
 
-function SettleModal({ open, groupId, target, onClose, onSaved }: SettleModalProps) {
+function SettleDialog({ groupId, target, onClose, onSaved }: SettleDialogProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -587,6 +617,7 @@ function SettleModal({ open, groupId, target, onClose, onSaved }: SettleModalPro
         amount: fd.get("amount"),
         note: fd.get("note") || null,
       });
+      toast.success("Payment recorded", { description: `Waiting for ${target.name} to confirm.` });
       onSaved();
     } catch (err) {
       setError((err as Error).message);
@@ -595,41 +626,52 @@ function SettleModal({ open, groupId, target, onClose, onSaved }: SettleModalPro
     }
   };
 
-  if (!target) return null;
-
   return (
-    <Modal open={open} title={`Pay ${target.name}`} onClose={onClose}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit(e.currentTarget);
-        }}
-        className="space-y-4"
-      >
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          Record a payment you've made to <span className="font-semibold">{target.name}</span>. It stays pending
-          until they confirm they received it — only then do the balances change.
-        </p>
-
-        <FieldWrap label="Amount">
-          <Input type="number" name="amount" min="0" step="0.01" defaultValue={target.amount} required autoFocus />
-        </FieldWrap>
-
-        <FieldWrap label="Note (optional)">
-          <Input name="note" placeholder="e.g. sent via eSewa" />
-        </FieldWrap>
-
-        {error && <p className="text-sm text-red-600">{error}</p>}
-
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={saving}>
-            {saving ? "Recording…" : "I paid this"}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+    <Dialog
+      open={!!target}
+      onOpenChange={(o) => {
+        if (!o) {
+          setError(null);
+          onClose();
+        }
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        {target && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Pay {target.name}</DialogTitle>
+              <DialogDescription>
+                Record a payment you've made to {target.name}. It stays pending until they confirm they received it —
+                only then do the balances change.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                submit(e.currentTarget);
+              }}
+              className="grid gap-4"
+            >
+              <FormField label="Amount" htmlFor="s-amount">
+                <Input id="s-amount" type="number" inputMode="decimal" name="amount" min="0" step="0.01" defaultValue={target.amount} required autoFocus />
+              </FormField>
+              <FormField label="Note (optional)" htmlFor="s-note">
+                <Input id="s-note" name="note" placeholder="e.g. sent via eSewa" />
+              </FormField>
+              <FormError message={error} />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving ? "Recording…" : "I paid this"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

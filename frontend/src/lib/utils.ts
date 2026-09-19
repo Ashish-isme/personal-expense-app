@@ -1,3 +1,11 @@
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+/** Joins class names, letting later Tailwind classes override earlier ones (shadcn's helper). */
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
 // Small formatting + helper utilities shared across the UI.
 
 /** Formats a number as currency. Defaults to NPR (Rs) — change here to localize. */
@@ -7,12 +15,12 @@ export function formatCurrency(value: number): string {
   return `${sign}Rs ${abs.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 }
 
-/** Compact currency for tight spaces, e.g. "Rs 1.2k". */
-export function formatCompact(value: number): string {
-  const sign = value < 0 ? "-" : "";
+/** Short axis tick for money charts, e.g. "45k" or "1.2M" (the tooltip shows the full amount). */
+export function formatAxis(value: number): string {
   const abs = Math.abs(value);
-  if (abs >= 1000) return `${sign}Rs ${(abs / 1000).toFixed(1)}k`;
-  return `${sign}Rs ${abs}`;
+  if (abs >= 1_000_000) return `${+(value / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${+(value / 1_000).toFixed(1)}k`;
+  return String(value);
 }
 
 /** e.g. "Jul 7, 2026" */
@@ -42,30 +50,6 @@ export function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(y, m - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-/** Merges class names, dropping falsy values. */
-export function cx(...classes: (string | false | null | undefined)[]): string {
-  return classes.filter(Boolean).join(" ");
-}
-
-/** A consistent, accessible categorical color palette (works in light & dark). */
-export const CHART_COLORS = [
-  "#5b5bd6", // indigo (brand)
-  "#12a594", // teal
-  "#e5484d", // red
-  "#f76b15", // orange
-  "#e2a336", // amber
-  "#30a46c", // green
-  "#8e4ec6", // purple
-  "#0091ff", // blue
-  "#d6409f", // pink
-  "#647a8f", // slate
-];
-
-/** Deterministically pick a color for a category name. */
-export function colorFor(index: number): string {
-  return CHART_COLORS[index % CHART_COLORS.length];
 }
 
 export const PAYMENT_METHODS = ["Cash", "Bank", "eSewa", "Khalti"] as const;

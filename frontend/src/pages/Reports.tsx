@@ -1,26 +1,35 @@
 import { useState } from "react";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Banknote, FileSpreadsheet, FileText, Inbox, TrendingDown, Wallet } from "lucide-react";
+import { useFetch } from "@/lib/useFetch";
+import { downloadUrl } from "@/lib/api";
+import type { ReportData } from "@/lib/types";
+import { currentMonth, formatAxis, formatCurrency, monthTitle } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
-import { Download, FileSpreadsheet, FileText } from "lucide-react";
-import { useFetch } from "../lib/useFetch";
-import { downloadUrl } from "../lib/api";
-import type { ReportData } from "../lib/types";
-import { currentMonth, formatCurrency, formatCompact, colorFor, cx } from "../lib/utils";
-import { PageHeader } from "../components/ui/PageHeader";
-import { Button } from "../components/ui/Button";
-import { StatCard } from "../components/ui/StatCard";
-import { EmptyState } from "../components/ui/EmptyState";
-import { Wallet, TrendingDown, Banknote, Inbox } from "lucide-react";
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import { PageHeader } from "@/components/app/PageHeader";
+import { StatCard } from "@/components/app/StatCard";
+import { EmptyState } from "@/components/app/EmptyState";
+import { CategoryBars } from "@/components/charts/CategoryBars";
 
 type ReportType = "monthly" | "yearly" | "category";
+
+// Same validated series hues as the dashboard trend chart.
+const monthlyConfig = {
+  income: { label: "Income", theme: { light: "#5b5bd6", dark: "#7b7ee6" } },
+  expense: { label: "Expenses", theme: { light: "#d97706", dark: "#c9780e" } },
+} satisfies ChartConfig;
 
 export function Reports() {
   const [type, setType] = useState<ReportType>("monthly");
@@ -35,173 +44,123 @@ export function Reports() {
     setPeriod(next === "monthly" ? currentMonth() : String(new Date().getFullYear()));
   };
 
-  const exportHref = (fmt: "csv" | "xlsx") =>
-    downloadUrl(`/api/reports/export.${fmt}?type=${type}&period=${period}`);
-
-  const tabs: { key: ReportType; label: string }[] = [
-    { key: "monthly", label: "Monthly" },
-    { key: "yearly", label: "Yearly" },
-    { key: "category", label: "Category" },
-  ];
+  const exportHref = (fmt: "csv" | "xlsx") => downloadUrl(`/api/reports/export.${fmt}?type=${type}&period=${period}`);
 
   return (
-    <div>
+    <>
       <PageHeader
         title="Reports"
-        subtitle="Analyze your finances and export the data"
+        description="Analyze your finances and export the data"
         actions={
           <>
-            <a href={exportHref("csv")} download>
-              <Button variant="secondary">
-                <FileText size={16} /> CSV
-              </Button>
-            </a>
-            <a href={exportHref("xlsx")} download>
-              <Button variant="secondary">
-                <FileSpreadsheet size={16} /> Excel
-              </Button>
-            </a>
+            <Button variant="outline" asChild>
+              <a href={exportHref("csv")} download>
+                <FileText /> CSV
+              </a>
+            </Button>
+            <Button variant="outline" asChild>
+              <a href={exportHref("xlsx")} download>
+                <FileSpreadsheet /> Excel
+              </a>
+            </Button>
           </>
         }
       />
 
-      {/* Controls */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="inline-flex rounded-lg border border-neutral-300 bg-white p-1 dark:border-neutral-700 dark:bg-neutral-900">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => changeType(t.key)}
-              className={cx(
-                "rounded-md px-3 py-1.5 text-sm font-medium transition",
-                type === t.key
-                  ? "bg-brand text-white"
-                  : "text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs value={type} onValueChange={(v) => changeType(v as ReportType)}>
+          <TabsList>
+            <TabsTrigger value="monthly">Monthly</TabsTrigger>
+            <TabsTrigger value="yearly">Yearly</TabsTrigger>
+            <TabsTrigger value="category">Category</TabsTrigger>
+          </TabsList>
+        </Tabs>
         {type === "monthly" ? (
-          <input
-            type="month"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="field w-auto"
-          />
+          <Input type="month" value={period} onChange={(e) => setPeriod(e.target.value)} className="sm:w-44" aria-label="Month" />
         ) : (
-          <input
+          <Input
             type="number"
             min="2000"
             max="2100"
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
-            className="field w-28"
+            className="sm:w-28"
+            aria-label="Year"
           />
         )}
       </div>
 
       {loading && !data ? (
-        <div className="card p-6 text-sm text-neutral-400">Loading…</div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {Array.from({ length: 3 }, (_, i) => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
+          ))}
+        </div>
       ) : data ? (
         <>
-          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatCard label="Total Income" value={data.totals.income} icon={Wallet} tone="positive" />
-            <StatCard label="Total Expenses" value={data.totals.expense} icon={TrendingDown} tone="negative" />
-            <StatCard
-              label="Net"
-              value={data.totals.net}
-              icon={Banknote}
-              tone={data.totals.net >= 0 ? "positive" : "negative"}
-            />
-          </div>
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <StatCard label="Income" value={data.totals.income} icon={Wallet} tone="positive" />
+            <StatCard label="Expenses" value={data.totals.expense} icon={TrendingDown} />
+            <StatCard label="Net" value={data.totals.net} icon={Banknote} tone={data.totals.net >= 0 ? "positive" : "negative"} />
+          </section>
 
-          {/* Monthly breakdown (yearly report) or category breakdown */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
-            <div className="card p-5 lg:col-span-3">
-              <h2 className="mb-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100">
-                {type === "yearly" ? "Monthly Breakdown" : "Spending by Category"}
-              </h2>
-              {type === "yearly" ? (
-                data.monthly.length ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={data.monthly} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,120,120,0.15)" vertical={false} />
-                      <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={(v) => formatCompact(v)} tick={axisTick} axisLine={false} tickLine={false} width={56} />
-                      <Tooltip
-                        formatter={(v: number, n: string) => [formatCurrency(v), n === "income" ? "Income" : "Expense"]}
-                        contentStyle={tooltipStyle}
-                        cursor={{ fill: "rgba(120,120,120,0.08)" }}
-                      />
-                      <Bar dataKey="income" fill="#30a46c" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                      <Bar dataKey="expense" fill="#e5484d" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                    </BarChart>
-                  </ResponsiveContainer>
+          <section className={type === "yearly" ? "grid grid-cols-1 gap-4 lg:grid-cols-5" : undefined}>
+            {type === "yearly" && (
+              <Card className="lg:col-span-3">
+                <CardHeader>
+                  <CardTitle>Month by month</CardTitle>
+                  <CardDescription>Income and expenses in {period}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {data.monthly.length ? (
+                    <ChartContainer config={monthlyConfig} className="aspect-auto h-72 w-full">
+                      <BarChart data={data.monthly} barGap={2} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                        <CartesianGrid vertical={false} strokeOpacity={0.5} />
+                        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                        <YAxis tickFormatter={(v: number) => formatAxis(v)} tickLine={false} axisLine={false} width={40} />
+                        <ChartTooltip
+                          cursor={{ fill: "var(--muted)", opacity: 0.5 }}
+                          content={
+                            <ChartTooltipContent
+                              formatter={(value, name) => (
+                                <div className="flex w-full items-center justify-between gap-4">
+                                  <span className="text-muted-foreground">
+                                    {monthlyConfig[name as keyof typeof monthlyConfig]?.label ?? name}
+                                  </span>
+                                  <span className="tabular font-medium">{formatCurrency(Number(value))}</span>
+                                </div>
+                              )}
+                            />
+                          }
+                        />
+                        <ChartLegend content={<ChartLegendContent />} />
+                        <Bar dataKey="income" fill="var(--color-income)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                        <Bar dataKey="expense" fill="var(--color-expense)" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                      </BarChart>
+                    </ChartContainer>
+                  ) : (
+                    <EmptyState icon={Inbox} title="No data for this year" />
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            <Card className={type === "yearly" ? "lg:col-span-2" : undefined}>
+              <CardHeader>
+                <CardTitle>Spending by category</CardTitle>
+                <CardDescription>{type === "monthly" ? monthTitle(period) : `All of ${period}`}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {data.byCategory.length ? (
+                  <CategoryBars data={data.byCategory} />
                 ) : (
-                  <EmptyState icon={Inbox} title="No data for this year" />
-                )
-              ) : data.byCategory.length ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={data.byCategory} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,120,120,0.15)" horizontal={false} />
-                    <XAxis type="number" tickFormatter={(v) => formatCompact(v)} tick={axisTick} axisLine={false} tickLine={false} />
-                    <YAxis type="category" dataKey="category" tick={axisTick} axisLine={false} tickLine={false} width={90} />
-                    <Tooltip
-                      formatter={(v: number) => [formatCurrency(v), "Spent"]}
-                      contentStyle={tooltipStyle}
-                      cursor={{ fill: "rgba(120,120,120,0.08)" }}
-                    />
-                    <Bar dataKey="amount" radius={[0, 4, 4, 0]} isAnimationActive={false}>
-                      {data.byCategory.map((entry, i) => (
-                        <Cell key={entry.category} fill={colorFor(i)} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <EmptyState icon={Inbox} title="No spending in this period" />
-              )}
-            </div>
-
-            {/* Category table */}
-            <div className="card p-5 lg:col-span-2">
-              <h2 className="mb-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100">Category Totals</h2>
-              {data.byCategory.length ? (
-                <ul className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                  {data.byCategory.map((c, i) => (
-                    <li key={c.category} className="flex items-center justify-between py-2 text-sm">
-                      <span className="flex items-center gap-2">
-                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: colorFor(i) }} />
-                        <span className="text-neutral-700 dark:text-neutral-200">{c.category}</span>
-                      </span>
-                      <span className="font-medium text-neutral-800 dark:text-neutral-100">{formatCurrency(c.amount)}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <EmptyState icon={Inbox} title="No categories" />
-              )}
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-center gap-2 text-xs text-neutral-400">
-            <Download size={14} /> Use the CSV or Excel buttons above to export this report.
-          </div>
+                  <EmptyState icon={Inbox} title="No spending in this period" />
+                )}
+              </CardContent>
+            </Card>
+          </section>
         </>
       ) : null}
-    </div>
+    </>
   );
 }
-
-const axisTick = { fontSize: 11, fill: "currentColor" } as const;
-const tooltipStyle = {
-  borderRadius: 8,
-  border: "1px solid rgba(120,120,120,0.2)",
-  background: "rgba(30,30,30,0.92)",
-  color: "#fff",
-  fontSize: 12,
-  padding: "8px 12px",
-} as const;

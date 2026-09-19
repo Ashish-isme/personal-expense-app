@@ -1,14 +1,13 @@
+import { CartesianGrid, LabelList, Line, LineChart, XAxis, YAxis } from "recharts";
 import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-} from "recharts";
-import { formatCompact, formatCurrency } from "../../lib/utils";
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import { formatAxis, formatCurrency } from "@/lib/utils";
 
 interface TrendPoint {
   label: string;
@@ -16,53 +15,63 @@ interface TrendPoint {
   income: number;
 }
 
-interface TrendChartProps {
-  data: TrendPoint[];
-}
+// Two categorical hues (validated for colour-vision deficiency in light and
+// dark). Green/red are kept for status, not for series identity.
+const config = {
+  income: { label: "Income", theme: { light: "#5b5bd6", dark: "#7b7ee6" } },
+  expense: { label: "Expenses", theme: { light: "#d97706", dark: "#c9780e" } },
+} satisfies ChartConfig;
 
-/** Income vs. expense trend across recent months. */
-export function TrendChart({ data }: TrendChartProps) {
+/** Income vs. expenses across recent months. */
+export function TrendChart({ data }: { data: TrendPoint[] }) {
+  const last = data.length - 1;
+  // Names the series at the end of each line, so identity isn't carried by colour alone.
+  const endLabel = (name: string) =>
+    function EndLabel(props: { x?: number | string; y?: number | string; index?: number }) {
+      if (props.index !== last) return null;
+      return (
+        <text x={Number(props.x) + 8} y={Number(props.y)} dy={4} className="fill-muted-foreground text-[11px]">
+          {name}
+        </text>
+      );
+    };
+
   return (
-    <ResponsiveContainer width="100%" height={280}>
-      <AreaChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
-        <defs>
-          <linearGradient id="expenseGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#e5484d" stopOpacity={0.35} />
-            <stop offset="100%" stopColor="#e5484d" stopOpacity={0} />
-          </linearGradient>
-          <linearGradient id="incomeGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#30a46c" stopOpacity={0.35} />
-            <stop offset="100%" stopColor="#30a46c" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(120,120,120,0.15)" vertical={false} />
-        <XAxis dataKey="label" tick={axisTick} axisLine={false} tickLine={false} />
-        <YAxis tickFormatter={(v) => formatCompact(v)} tick={axisTick} axisLine={false} tickLine={false} width={56} />
-        <Tooltip
-          formatter={(value: number, name: string) => [formatCurrency(value), name === "income" ? "Income" : "Expense"]}
-          contentStyle={tooltipStyle}
+    <ChartContainer config={config} className="aspect-auto h-64 w-full">
+      <LineChart data={data} margin={{ top: 8, right: 64, left: 0, bottom: 0 }}>
+        <CartesianGrid vertical={false} strokeOpacity={0.5} />
+        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+        <YAxis tickFormatter={(v: number) => formatAxis(v)} tickLine={false} axisLine={false} width={40} />
+        <ChartTooltip
+          cursor={{ strokeDasharray: "3 3" }}
+          content={
+            <ChartTooltipContent
+              indicator="line"
+              formatter={(value, name) => (
+                <div className="flex w-full items-center justify-between gap-4">
+                  <span className="text-muted-foreground">{config[name as keyof typeof config]?.label ?? name}</span>
+                  <span className="tabular font-medium">{formatCurrency(Number(value))}</span>
+                </div>
+              )}
+            />
+          }
         />
-        <Legend
-          iconType="circle"
-          iconSize={8}
-          wrapperStyle={{ fontSize: 12 }}
-          formatter={(value) => (
-            <span className="text-neutral-600 dark:text-neutral-300">{value === "income" ? "Income" : "Expense"}</span>
-          )}
-        />
-        <Area type="monotone" dataKey="income" stroke="#30a46c" strokeWidth={2} fill="url(#incomeGrad)" isAnimationActive={false} />
-        <Area type="monotone" dataKey="expense" stroke="#e5484d" strokeWidth={2} fill="url(#expenseGrad)" isAnimationActive={false} />
-      </AreaChart>
-    </ResponsiveContainer>
+        <ChartLegend content={<ChartLegendContent />} />
+        {(["income", "expense"] as const).map((key) => (
+          <Line
+            key={key}
+            dataKey={key}
+            type="monotone"
+            stroke={`var(--color-${key})`}
+            strokeWidth={2}
+            dot={false}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--card)" }}
+            isAnimationActive={false}
+          >
+            <LabelList content={endLabel(config[key].label)} />
+          </Line>
+        ))}
+      </LineChart>
+    </ChartContainer>
   );
 }
-
-const axisTick = { fontSize: 11, fill: "currentColor" } as const;
-const tooltipStyle = {
-  borderRadius: 8,
-  border: "1px solid rgba(120,120,120,0.2)",
-  background: "rgba(30,30,30,0.92)",
-  color: "#fff",
-  fontSize: 12,
-  padding: "8px 12px",
-} as const;

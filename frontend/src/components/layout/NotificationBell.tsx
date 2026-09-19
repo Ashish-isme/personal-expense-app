@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, CheckCheck } from "lucide-react";
-import { api, NOTIFICATIONS_CHANGED_EVENT } from "../../lib/api";
-import type { NotificationFeed } from "../../lib/types";
-import { cx } from "../../lib/utils";
+import { toast } from "sonner";
+import { api, NOTIFICATIONS_CHANGED_EVENT } from "@/lib/api";
+import type { Notification, NotificationFeed } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 /** Poll interval for the unread badge. Cheap query, and keeps the bell live. */
 const POLL_MS = 60_000;
@@ -17,7 +21,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-/** Strips the HTML the month-end summary uses, so the dropdown stays plain text. */
+/** Strips the HTML the month-end summary uses, so the list stays plain text. */
 function toPlainText(html: string): string {
   return html
     .replace(/<li>/g, "• ")
@@ -28,19 +32,33 @@ function toPlainText(html: string): string {
     .trim();
 }
 
+const isBudgetAlert = (n: Notification) => n.type === "budget_warning" || n.type === "budget_exceeded";
+
 export function NotificationBell() {
   const [feed, setFeed] = useState<NotificationFeed | null>(null);
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  // Ids already seen, so only budget alerts that arrive while the app is open pop up as toasts.
+  const seen = useRef<Set<string> | null>(null);
 
-  const load = () => {
+  const load = useCallback(() => {
     api
       .get<NotificationFeed>("/api/notifications")
-      .then(setFeed)
+      .then((next) => {
+        if (seen.current) {
+          for (const n of next.items) {
+            if (!n.read && !seen.current.has(n.id) && isBudgetAlert(n)) {
+              const show = n.type === "budget_exceeded" ? toast.error : toast.warning;
+              show(n.title, { description: n.body });
+            }
+          }
+        }
+        seen.current = new Set(next.items.map((n) => n.id));
+        setFeed(next);
+      })
       .catch(() => {
         /* a failed poll shouldn't surface an error in the chrome */
       });
-  };
+  }, []);
 
   useEffect(() => {
     load();
@@ -51,17 +69,7 @@ export function NotificationBell() {
       clearInterval(t);
       window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, load);
     };
-  }, []);
-
-  // Close on outside click.
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open]);
+  }, [load]);
 
   const markAllRead = async () => {
     await api.post("/api/notifications/read-all", {});
@@ -71,72 +79,52 @@ export function NotificationBell() {
   const unread = feed?.unread ?? 0;
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="relative rounded-lg border border-neutral-300 p-2 text-neutral-500 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-        aria-label={unread ? `${unread} unread notifications` : "Notifications"}
-      >
-        <Bell size={18} />
-        {unread > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-semibold text-white">
-            {unread > 9 ? "9+" : unread}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-lg dark:border-neutral-800 dark:bg-surface-card">
-          <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
-            <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">Notifications</span>
-            {unread > 0 && (
-              <button
-                onClick={markAllRead}
-                className="inline-flex items-center gap-1 text-xs text-neutral-400 transition hover:text-brand"
-              >
-                <CheckCheck size={13} /> Mark all read
-              </button>
-            )}
-          </div>
-
-          <div className="max-h-96 overflow-y-auto">
-            {feed && feed.items.length ? (
-              <ul className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                {feed.items.map((n) => (
-                  <li
-                    key={n.id}
-                    className={cx("px-3 py-2.5", !n.read && "bg-brand/5")}
-                  >
-                    <div className="flex items-start gap-2">
-                      {!n.read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
-                      <div className={cx("min-w-0", n.read && "pl-3.5")}>
-                        <p
-                          className={cx(
-                            "text-sm font-medium",
-                            n.type === "budget_exceeded"
-                              ? "text-red-600 dark:text-red-400"
-                              : n.type === "budget_warning"
-                                ? "text-amber-600 dark:text-amber-400"
-                                : "text-neutral-800 dark:text-neutral-100"
-                          )}
-                        >
-                          {n.title}
-                        </p>
-                        <p className="mt-0.5 whitespace-pre-line text-xs text-neutral-500 dark:text-neutral-400">
-                          {toPlainText(n.body)}
-                        </p>
-                        <p className="mt-1 text-[11px] text-neutral-400">{timeAgo(n.createdAt)}</p>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="px-3 py-8 text-center text-sm text-neutral-400">Nothing here yet.</p>
-            )}
-          </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative" aria-label={unread ? `${unread} unread notifications` : "Notifications"}>
+          <Bell />
+          {unread > 0 && (
+            <span className="bg-primary text-primary-foreground absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold">
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))] p-0">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <span className="text-sm font-semibold">Notifications</span>
+          {unread > 0 && (
+            <Button variant="ghost" size="xs" onClick={markAllRead} className="text-muted-foreground">
+              <CheckCheck /> Mark all read
+            </Button>
+          )}
         </div>
-      )}
-    </div>
+        {feed && feed.items.length ? (
+          <ScrollArea className="max-h-96">
+            <ul className="divide-y">
+              {feed.items.map((n) => (
+                <li key={n.id} className={cn("px-4 py-3", !n.read && "bg-accent/40")}>
+                  <div className="flex items-start gap-2">
+                    <span
+                      className={cn(
+                        "mt-1.5 size-1.5 shrink-0 rounded-full",
+                        n.read ? "bg-transparent" : n.type === "budget_exceeded" ? "bg-destructive" : n.type === "budget_warning" ? "bg-warning" : "bg-primary"
+                      )}
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{n.title}</p>
+                      <p className="text-muted-foreground mt-0.5 text-xs whitespace-pre-line">{toPlainText(n.body)}</p>
+                      <p className="text-muted-foreground/70 mt-1 text-[11px]">{timeAgo(n.createdAt)}</p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </ScrollArea>
+        ) : (
+          <p className="text-muted-foreground px-4 py-10 text-center text-sm">You're all caught up.</p>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }

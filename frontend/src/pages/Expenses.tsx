@@ -1,31 +1,27 @@
 import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Receipt, Search, X } from "lucide-react";
-import { useFetch } from "../lib/useFetch";
-import { api, refreshNotifications } from "../lib/api";
-import type { Expense, PaymentMethod } from "../lib/types";
-import {
-  currentMonth,
-  formatCurrency,
-  formatDate,
-  toDateInput,
-  PAYMENT_METHODS,
-} from "../lib/utils";
-import { useCategories } from "../lib/useCategories";
-import { CategorySelect } from "../components/ui/CategorySelect";
-import { PageHeader } from "../components/ui/PageHeader";
-import { MonthSwitcher } from "../components/ui/MonthSwitcher";
-import { Button } from "../components/ui/Button";
-import { Modal } from "../components/ui/Modal";
-import { FieldWrap, Input, Select, Textarea } from "../components/ui/Field";
-import { Badge } from "../components/ui/Badge";
-import { EmptyState } from "../components/ui/EmptyState";
-
-const methodTone: Record<PaymentMethod, "green" | "blue" | "amber" | "neutral"> = {
-  Cash: "green",
-  Bank: "blue",
-  eSewa: "amber",
-  Khalti: "neutral",
-};
+import { toast } from "sonner";
+import { useFetch } from "@/lib/useFetch";
+import { api, refreshNotifications } from "@/lib/api";
+import type { Expense } from "@/lib/types";
+import { currentMonth, formatCurrency, formatDate, toDateInput, PAYMENT_METHODS } from "@/lib/utils";
+import { useCategories } from "@/lib/useCategories";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PageHeader } from "@/components/app/PageHeader";
+import { MonthSwitcher } from "@/components/app/MonthSwitcher";
+import { EmptyState } from "@/components/app/EmptyState";
+import { CategorySelect } from "@/components/app/CategorySelect";
+import { FormError, FormField } from "@/components/app/FormField";
+import { RowActions } from "@/components/app/RowActions";
+import { ListSkeleton } from "@/components/app/ListSkeleton";
+import { useConfirm } from "@/components/app/ConfirmProvider";
 
 export function Expenses() {
   const [month, setMonth] = useState(currentMonth());
@@ -33,6 +29,7 @@ export function Expenses() {
   const [category, setCategory] = useState("");
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
+  const confirm = useConfirm();
 
   const hasFilters = Boolean(search || category || minAmount || maxAmount);
 
@@ -63,36 +60,34 @@ export function Expenses() {
     setEditing(null);
     setOpen(true);
   };
-  const openEdit = (e: Expense) => {
-    setEditing(e);
-    setOpen(true);
-  };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this expense?")) return;
-    await api.del(`/api/expenses/${id}`);
+  const handleDelete = async (e: Expense) => {
+    const ok = await confirm({ title: "Delete this expense?", description: `${e.description} · ${formatCurrency(e.amount)}` });
+    if (!ok) return;
+    await api.del(`/api/expenses/${e.id}`);
+    toast.success("Expense deleted");
     reload();
   };
 
   return (
-    <div>
+    <>
       <PageHeader
         title="Expenses"
-        subtitle={`Total this month: ${formatCurrency(total)}`}
+        description={`${formatCurrency(total)} spent${hasFilters ? " (filtered)" : ""} this month`}
         actions={
           <>
             <MonthSwitcher month={month} onChange={setMonth} />
             <Button onClick={openAdd}>
-              <Plus size={16} /> Add
+              <Plus /> Add expense
             </Button>
           </>
         }
       />
 
-      {/* Search & filter bar */}
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="relative flex-1 sm:min-w-[220px]">
-          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+      {/* Search & filters */}
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+        <div className="relative col-span-2 sm:min-w-56 sm:flex-1">
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -101,153 +96,125 @@ export function Expenses() {
             aria-label="Search expenses"
           />
         </div>
-        <Select value={category} onChange={(e) => setCategory(e.target.value)} className="sm:w-40" aria-label="Filter by category">
+        <NativeSelect
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="col-span-2 sm:w-44"
+          aria-label="Filter by category"
+        >
           <option value="">All categories</option>
           {categoryNames.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
           ))}
-        </Select>
-        <Input
-          type="number"
-          value={minAmount}
-          onChange={(e) => setMinAmount(e.target.value)}
-          placeholder="Min"
-          min="0"
-          className="sm:w-24"
-          aria-label="Minimum amount"
-        />
-        <Input
-          type="number"
-          value={maxAmount}
-          onChange={(e) => setMaxAmount(e.target.value)}
-          placeholder="Max"
-          min="0"
-          className="sm:w-24"
-          aria-label="Maximum amount"
-        />
+        </NativeSelect>
+        <Input type="number" value={minAmount} onChange={(e) => setMinAmount(e.target.value)} placeholder="Min" min="0" className="sm:w-24" aria-label="Minimum amount" />
+        <Input type="number" value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} placeholder="Max" min="0" className="sm:w-24" aria-label="Maximum amount" />
         {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            <X size={14} /> Clear
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="col-span-2 sm:col-span-1">
+            <X /> Clear
           </Button>
         )}
       </div>
 
-      <div className="card overflow-hidden">
+      <Card className="gap-0 overflow-hidden py-0">
         {loading && !data ? (
-          <div className="p-6 text-sm text-neutral-400">Loading…</div>
+          <ListSkeleton />
         ) : data && data.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-neutral-200 text-left text-xs uppercase tracking-wide text-neutral-400 dark:border-neutral-800">
-                  <th className="px-4 py-3 font-medium">Date</th>
-                  <th className="px-4 py-3 font-medium">Category</th>
-                  <th className="px-4 py-3 font-medium">Description</th>
-                  <th className="px-4 py-3 font-medium">Method</th>
-                  <th className="px-4 py-3 text-right font-medium">Amount</th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                {data.map((e) => (
-                  <tr key={e.id} className="group hover:bg-neutral-50 dark:hover:bg-neutral-800/40">
-                    <td className="whitespace-nowrap px-4 py-3 text-neutral-500 dark:text-neutral-400">{formatDate(e.date)}</td>
-                    <td className="px-4 py-3">
-                      <Badge tone="neutral">{e.category}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-neutral-800 dark:text-neutral-100">
-                      {e.description}
-                      {e.notes && <span className="block text-xs text-neutral-400">{e.notes}</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge tone={methodTone[e.paymentMethod]}>{e.paymentMethod}</Badge>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-neutral-800 dark:text-neutral-100">
-                      {formatCurrency(e.amount)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
-                        <IconButton label="Edit" onClick={() => openEdit(e)}>
-                          <Pencil size={15} />
-                        </IconButton>
-                        <IconButton label="Delete" danger onClick={() => handleDelete(e.id)}>
-                          <Trash2 size={15} />
-                        </IconButton>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="hidden pl-4 sm:table-cell">Date</TableHead>
+                <TableHead className="pl-4 sm:pl-2">Description</TableHead>
+                <TableHead className="hidden md:table-cell">Category</TableHead>
+                <TableHead className="hidden lg:table-cell">Method</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="w-12" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.map((e) => (
+                <TableRow key={e.id}>
+                  <TableCell className="text-muted-foreground hidden pl-4 sm:table-cell">{formatDate(e.date)}</TableCell>
+                  <TableCell className="max-w-0 pl-4 whitespace-normal sm:pl-2">
+                    <p className="truncate font-medium">{e.description}</p>
+                    {/* On phones the date and category fold under the description. */}
+                    <p className="text-muted-foreground truncate text-xs md:hidden">
+                      <span className="sm:hidden">{formatDate(e.date)} · </span>
+                      {e.category}
+                    </p>
+                    {e.notes && <p className="text-muted-foreground hidden truncate text-xs md:block">{e.notes}</p>}
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    <Badge variant="secondary">{e.category}</Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground hidden lg:table-cell">{e.paymentMethod}</TableCell>
+                  <TableCell className="tabular text-right font-medium">{formatCurrency(e.amount)}</TableCell>
+                  <TableCell className="pr-3 text-right">
+                    <RowActions
+                      actions={[
+                        { label: "Edit", icon: Pencil, onSelect: () => { setEditing(e); setOpen(true); } },
+                        { label: "Delete", icon: Trash2, onSelect: () => handleDelete(e), destructive: true },
+                      ]}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         ) : (
           <EmptyState
             icon={Receipt}
             title={hasFilters ? "No matching expenses" : "No expenses this month"}
             description={hasFilters ? "Try adjusting or clearing your filters." : "Add your first expense to get started."}
+            action={
+              !hasFilters && (
+                <Button variant="outline" size="sm" onClick={openAdd}>
+                  <Plus /> Add expense
+                </Button>
+              )
+            }
           />
         )}
-      </div>
+      </Card>
 
-      <ExpenseModal
+      <ExpenseDialog
         open={open}
         expense={editing}
         month={month}
         categories={categoryNames}
-        onClose={() => setOpen(false)}
+        onOpenChange={setOpen}
         onSaved={() => {
           setOpen(false);
           reload();
           reloadCategories();
         }}
       />
-    </div>
+    </>
   );
 }
 
-function IconButton({
-  children,
-  onClick,
-  label,
-  danger,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  label: string;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label={label}
-      className={
-        "rounded-md p-1.5 text-neutral-400 transition hover:bg-neutral-100 dark:hover:bg-neutral-700 " +
-        (danger ? "hover:text-red-600" : "hover:text-neutral-700 dark:hover:text-neutral-200")
-      }
-    >
-      {children}
-    </button>
-  );
-}
-
-interface ExpenseModalProps {
+interface ExpenseDialogProps {
   open: boolean;
   expense: Expense | null;
   month: string;
   categories: string[];
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }
 
 /** Add / edit form for a single expense. */
-function ExpenseModal({ open, expense, month, categories, onClose, onSaved }: ExpenseModalProps) {
+function ExpenseDialog({ open, expense, month, categories, onOpenChange, onSaved }: ExpenseDialogProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Default new expenses to the first day of the currently viewed month.
-  const defaultDate = expense ? toDateInput(expense.date) : toDateInput(`${month}-01T00:00:00`);
+  // New expenses default to today when viewing the current month, else the 1st of the viewed month.
+  const defaultDate = expense
+    ? toDateInput(expense.date)
+    : month === currentMonth()
+      ? toDateInput(new Date())
+      : toDateInput(`${month}-01T00:00:00`);
 
   const submit = async (form: HTMLFormElement) => {
     const fd = new FormData(form);
@@ -264,6 +231,7 @@ function ExpenseModal({ open, expense, month, categories, onClose, onSaved }: Ex
     try {
       if (expense) await api.put(`/api/expenses/${expense.id}`, payload);
       else await api.post("/api/expenses", payload);
+      toast.success(expense ? "Expense updated" : "Expense added");
       // Saving may have pushed a category over budget and created an alert.
       refreshNotifications();
       onSaved();
@@ -275,57 +243,68 @@ function ExpenseModal({ open, expense, month, categories, onClose, onSaved }: Ex
   };
 
   return (
-    <Modal open={open} title={expense ? "Edit Expense" : "Add Expense"} onClose={onClose}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit(e.currentTarget);
-        }}
-        className="space-y-4"
-      >
-        <div className="grid grid-cols-2 gap-3">
-          <FieldWrap label="Date">
-            <Input type="date" name="date" defaultValue={defaultDate} required />
-          </FieldWrap>
-          <FieldWrap label="Amount">
-            <Input type="number" name="amount" min="0" step="0.01" defaultValue={expense?.amount} placeholder="0" required />
-          </FieldWrap>
-        </div>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) setError(null);
+        onOpenChange(o);
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{expense ? "Edit expense" : "Add expense"}</DialogTitle>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit(e.currentTarget);
+          }}
+          className="grid gap-4"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Amount" htmlFor="amount">
+              <Input id="amount" type="number" inputMode="decimal" name="amount" min="0" step="0.01" defaultValue={expense?.amount} placeholder="0" required autoFocus={!expense} />
+            </FormField>
+            <FormField label="Date" htmlFor="date">
+              <Input id="date" type="date" name="date" defaultValue={defaultDate} required />
+            </FormField>
+          </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <FieldWrap label="Category">
-            <CategorySelect name="category" options={categories} defaultValue={expense?.category} />
-          </FieldWrap>
-          <FieldWrap label="Payment Method">
-            <Select name="paymentMethod" defaultValue={expense?.paymentMethod ?? "Cash"}>
-              {PAYMENT_METHODS.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </Select>
-          </FieldWrap>
-        </div>
+          <FormField label="Description" htmlFor="description">
+            <Input id="description" name="description" defaultValue={expense?.description} placeholder="What was it for?" required />
+          </FormField>
 
-        <FieldWrap label="Description">
-          <Input name="description" defaultValue={expense?.description} placeholder="What was it for?" required />
-        </FieldWrap>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Category" htmlFor="category">
+              <CategorySelect id="category" name="category" options={categories} defaultValue={expense?.category} />
+            </FormField>
+            <FormField label="Payment method" htmlFor="paymentMethod">
+              <NativeSelect id="paymentMethod" name="paymentMethod" defaultValue={expense?.paymentMethod ?? "Cash"}>
+                {PAYMENT_METHODS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </NativeSelect>
+            </FormField>
+          </div>
 
-        <FieldWrap label="Notes (optional)">
-          <Textarea name="notes" defaultValue={expense?.notes ?? ""} placeholder="Any extra details…" />
-        </FieldWrap>
+          <FormField label="Notes (optional)" htmlFor="notes">
+            <Textarea id="notes" name="notes" defaultValue={expense?.notes ?? ""} placeholder="Any extra details…" rows={2} />
+          </FormField>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+          <FormError message={error} />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

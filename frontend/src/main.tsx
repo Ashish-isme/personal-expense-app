@@ -4,6 +4,9 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { ThemeProvider } from "./context/ThemeContext";
 import { AuthProvider } from "./context/AuthContext";
+import { ConfirmProvider } from "./components/app/ConfirmProvider";
+import { Toaster } from "./components/ui/sonner";
+import { TooltipProvider } from "./components/ui/tooltip";
 import "./index.css";
 
 createRoot(document.getElementById("root")!).render(
@@ -11,7 +14,12 @@ createRoot(document.getElementById("root")!).render(
     <ThemeProvider>
       <BrowserRouter>
         <AuthProvider>
-          <App />
+          <TooltipProvider>
+            <ConfirmProvider>
+              <App />
+            </ConfirmProvider>
+          </TooltipProvider>
+          <Toaster position="top-center" richColors closeButton />
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>
