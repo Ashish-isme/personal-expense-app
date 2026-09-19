@@ -28,7 +28,7 @@ export function parseBody<T extends z.ZodTypeAny>(schema: T, body: unknown): z.i
 
 export const expenseSchema = z.object({
   date: z.coerce.date(),
-  category: z.string().min(1, "Category is required"),
+  category: z.string().trim().min(1, "Category is required").max(40, "Category must be 40 characters or fewer"),
   description: z.string().min(1, "Description is required"),
   amount: z.coerce.number().positive("Amount must be greater than 0"),
   paymentMethod: z.enum(["Cash", "Bank", "eSewa", "Khalti"]).default("Cash"),
@@ -44,8 +44,10 @@ export const incomeSchema = z.object({
 
 export const budgetSchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/, "Month must be in YYYY-MM format"),
-  category: z.string().min(1, "Category is required"),
+  category: z.string().trim().min(1, "Category is required"),
   amount: z.coerce.number().nonnegative("Amount must be 0 or more"),
+  // "every" = the category's standing goal for every month; "month" = this month only.
+  scope: z.enum(["every", "month"]).default("every"),
 });
 
 export const recurringSchema = z

@@ -28,6 +28,8 @@ model User {
   budgets    Budget[]
   debts      Debt[]
   recurrings Recurring[]
+  categories Category[]
+  budgetAlerts BudgetAlert[]
 
   // Group / shared-expense relations
   createdGroups       Group[]             @relation("GroupCreator")
@@ -129,6 +131,7 @@ model Notification {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   // type: "expense_added" | "settlement_requested" | "settlement_confirmed"
   //     | "settlement_declined" | "monthly_summary" | "member_joined"
+  //     | "budget_warning" | "budget_exceeded"
   type      String
   title     String
   body      String
@@ -137,6 +140,34 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@index([userId, read])
+}
+
+/// Records each budget alert already sent (e.g. "budget:2026-09:Food:over") so
+/// the same alert is never delivered twice.
+model BudgetAlert {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, key])
+}
+
+/// An expense category the user tracks. `monthlyGoal` is the standing spending
+/// limit applied to every month; a Budget row for a specific month overrides it
+/// for that month only. Archived categories are hidden from pickers but keep
+/// their history.
+model Category {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  monthlyGoal Float?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, name])
 }
 
 /// A single spending record.
@@ -172,7 +203,8 @@ model Income {
   @@index([userId, date])
 }
 
-/// Per-category monthly budget. `month` is stored as `YYYY-MM`.
+/// A one-month budget for a category, overriding the category's standing
+/// `monthlyGoal` for that month. `month` is stored as `YYYY-MM`.
 model Budget {
   id        String   @id @default(cuid())
   userId    String

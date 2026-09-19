@@ -1,25 +1,41 @@
 import { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, PiggyBank, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, PiggyBank, AlertTriangle, Tags, EyeOff, RotateCcw, Check, X } from "lucide-react";
 import { useFetch } from "../lib/useFetch";
-import { api } from "../lib/api";
-import type { Budget as BudgetModel } from "../lib/types";
-import { currentMonth, formatCurrency, EXPENSE_CATEGORIES, cx, budgetStatus } from "../lib/utils";
+import { useCategories } from "../lib/useCategories";
+import { api, refreshNotifications } from "../lib/api";
+import type { Budget as BudgetModel, Category } from "../lib/types";
+import { currentMonth, formatCurrency, cx, budgetStatus } from "../lib/utils";
 import { PageHeader } from "../components/ui/PageHeader";
 import { MonthSwitcher } from "../components/ui/MonthSwitcher";
 import { Button } from "../components/ui/Button";
 import { Modal } from "../components/ui/Modal";
-import { FieldWrap, Input, Select } from "../components/ui/Field";
+import { FieldWrap, Input } from "../components/ui/Field";
+import { CategorySelect } from "../components/ui/CategorySelect";
 import { ProgressBar } from "../components/ui/ProgressBar";
 import { StatCard } from "../components/ui/StatCard";
 import { Badge } from "../components/ui/Badge";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Target, TrendingDown, Banknote } from "lucide-react";
 
+/** "2026-09" → "September 2026". */
+function monthName(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" });
+}
+
 export function Budget() {
   const [month, setMonth] = useState(currentMonth());
   const { data, loading, reload } = useFetch<BudgetModel[]>(`/api/budgets?month=${month}`);
+  const cats = useCategories();
   const [editing, setEditing] = useState<BudgetModel | null>(null);
   const [open, setOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+
+  const reloadAll = () => {
+    reload();
+    cats.reload();
+    refreshNotifications();
+  };
 
   const totals = useMemo(() => {
     const budgets = data ?? [];
@@ -33,20 +49,30 @@ export function Budget() {
     [data]
   );
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this budget?")) return;
-    await api.del(`/api/budgets/${id}`);
-    reload();
+  const handleDelete = async (b: BudgetModel) => {
+    if (b.source === "month") {
+      const goal = cats.categories.find((c) => c.name === b.category)?.monthlyGoal;
+      const note = goal ? ` Your usual ${formatCurrency(goal)} monthly goal will apply again.` : "";
+      if (!confirm(`Remove the ${monthName(month)} budget for ${b.category}?${note}`)) return;
+      await api.del(`/api/budgets/${b.overrideId}`);
+    } else {
+      if (!confirm(`Stop budgeting ${b.category} every month?`)) return;
+      await api.patch(`/api/categories/${b.categoryId}`, { monthlyGoal: null });
+    }
+    reloadAll();
   };
 
   return (
     <div>
       <PageHeader
         title="Budget"
-        subtitle="Set monthly limits per category and track your progress"
+        subtitle="Set monthly goals per category. You'll be notified at 80% and when you go over."
         actions={
           <>
             <MonthSwitcher month={month} onChange={setMonth} />
+            <Button variant="secondary" onClick={() => setManageOpen(true)}>
+              <Tags size={16} /> Categories
+            </Button>
             <Button
               onClick={() => {
                 setEditing(null);
@@ -93,7 +119,8 @@ export function Budget() {
                 <div>
                   <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">{b.category}</p>
                   <p className="text-xs text-neutral-400">
-                    {formatCurrency(b.actual)} of {formatCurrency(b.amount)}
+                    {formatCurrency(b.actual)} of {formatCurrency(b.amount)} ·{" "}
+                    {b.source === "goal" ? "every month" : "this month only"}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -110,7 +137,8 @@ export function Budget() {
                   >
                     {b.percentUsed}%
                   </span>
-                  <div className="flex gap-1 opacity-0 transition group-hover:opacity-100">
+                  {/* Always visible on touch screens, which have no hover. */}
+                  <div className="flex gap-1 transition sm:opacity-0 sm:group-hover:opacity-100">
                     <button
                       onClick={() => {
                         setEditing(b);
@@ -122,8 +150,8 @@ export function Budget() {
                       <Pencil size={14} />
                     </button>
                     <button
-                      onClick={() => handleDelete(b.id)}
-                      aria-label="Delete"
+                      onClick={() => handleDelete(b)}
+                      aria-label="Remove"
                       className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-red-600 dark:hover:bg-neutral-700"
                     >
                       <Trash2 size={14} />
@@ -147,7 +175,11 @@ export function Budget() {
         </div>
       ) : (
         <div className="card">
-          <EmptyState icon={PiggyBank} title="No budgets set" description="Create a budget for a category to start tracking." />
+          <EmptyState
+            icon={PiggyBank}
+            title="No budgets set"
+            description="Set a monthly goal for a category. It repeats every month until you change it."
+          />
         </div>
       )}
 
@@ -155,12 +187,20 @@ export function Budget() {
         open={open}
         budget={editing}
         month={month}
-        existing={data ?? []}
+        categories={cats.names.filter((c) => !(data ?? []).some((b) => b.category === c))}
         onClose={() => setOpen(false)}
         onSaved={() => {
           setOpen(false);
-          reload();
+          reloadAll();
         }}
+      />
+
+      <CategoriesModal
+        open={manageOpen}
+        categories={cats.categories}
+        suggestions={cats.suggestions}
+        onClose={() => setManageOpen(false)}
+        onChanged={reloadAll}
       />
     </div>
   );
@@ -170,30 +210,27 @@ interface BudgetModalProps {
   open: boolean;
   budget: BudgetModel | null;
   month: string;
-  existing: BudgetModel[];
+  /** Categories that don't have a budget this month yet (offered when adding). */
+  categories: string[];
   onClose: () => void;
   onSaved: () => void;
 }
 
-function BudgetModal({ open, budget, month, existing, onClose, onSaved }: BudgetModalProps) {
+function BudgetModal({ open, budget, month, categories, onClose, onSaved }: BudgetModalProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // When adding, only offer categories that don't already have a budget this month.
-  const usedCategories = new Set(existing.map((b) => b.category));
-  const available = budget ? EXPENSE_CATEGORIES : EXPENSE_CATEGORIES.filter((c) => !usedCategories.has(c));
 
   const submit = async (form: HTMLFormElement) => {
     const fd = new FormData(form);
     const payload = {
       month,
-      category: fd.get("category"),
+      category: budget?.category ?? fd.get("category"),
       amount: fd.get("amount"),
+      scope: fd.get("scope"),
     };
     setSaving(true);
     setError(null);
     try {
-      // POST upserts by (month, category), which covers both add and edit.
       await api.post("/api/budgets", payload);
       onSaved();
     } catch (err) {
@@ -204,7 +241,7 @@ function BudgetModal({ open, budget, month, existing, onClose, onSaved }: Budget
   };
 
   return (
-    <Modal open={open} title={budget ? "Edit Budget" : "Set Budget"} onClose={onClose}>
+    <Modal open={open} title={budget ? `Edit ${budget.category} budget` : "Set Budget"} onClose={onClose}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -212,19 +249,27 @@ function BudgetModal({ open, budget, month, existing, onClose, onSaved }: Budget
         }}
         className="space-y-4"
       >
-        <FieldWrap label="Category">
-          <Select name="category" defaultValue={budget?.category ?? available[0]} disabled={!!budget}>
-            {(budget ? [budget.category] : available).map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </Select>
-        </FieldWrap>
+        {!budget && (
+          <FieldWrap label="Category">
+            <CategorySelect name="category" options={categories} />
+          </FieldWrap>
+        )}
 
         <FieldWrap label="Monthly Budget Amount">
           <Input type="number" name="amount" min="0" step="0.01" defaultValue={budget?.amount} placeholder="0" required />
         </FieldWrap>
+
+        <fieldset className="space-y-2">
+          <legend className="label">Applies to</legend>
+          <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-200">
+            <input type="radio" name="scope" value="every" defaultChecked={budget?.source !== "month"} />
+            Every month, starting {monthName(month)}
+          </label>
+          <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-200">
+            <input type="radio" name="scope" value="month" defaultChecked={budget?.source === "month"} />
+            Only {monthName(month)}
+          </label>
+        </fieldset>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -238,5 +283,208 @@ function BudgetModal({ open, budget, month, existing, onClose, onSaved }: Budget
         </div>
       </form>
     </Modal>
+  );
+}
+
+interface CategoriesModalProps {
+  open: boolean;
+  categories: Category[];
+  suggestions: string[];
+  onClose: () => void;
+  onChanged: () => void;
+}
+
+/** Add, rename, hide and restore categories, and set each one's monthly goal. */
+function CategoriesModal({ open, categories, suggestions, onClose, onChanged }: CategoriesModalProps) {
+  const [newName, setNewName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const active = categories.filter((c) => !c.archived);
+  const hidden = categories.filter((c) => c.archived);
+
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      onChanged();
+      return true;
+    } catch (err) {
+      setError((err as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const add = async (name: string) => {
+    if (!name.trim()) return;
+    if (await run(() => api.post("/api/categories", { name }))) setNewName("");
+  };
+
+  return (
+    <Modal open={open} title="Categories" onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          add(newName);
+        }}
+        className="flex gap-2"
+      >
+        <Input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="New category, e.g. Vehicle"
+          maxLength={40}
+          aria-label="New category name"
+        />
+        <Button type="submit" disabled={busy || !newName.trim()}>
+          <Plus size={16} /> Add
+        </Button>
+      </form>
+
+      {suggestions.length > 0 && (
+        <div className="mt-3">
+          <p className="mb-1.5 text-xs text-neutral-400">Suggestions</p>
+          <div className="flex flex-wrap gap-1.5">
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                type="button"
+                disabled={busy}
+                onClick={() => add(s)}
+                className="rounded-full border border-neutral-300 px-2.5 py-0.5 text-xs text-neutral-600 transition hover:border-brand hover:text-brand dark:border-neutral-700 dark:text-neutral-300"
+              >
+                + {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+
+      <ul className="mt-4 max-h-80 divide-y divide-neutral-100 overflow-y-auto dark:divide-neutral-800">
+        {active.map((c) =>
+          editingId === c.id ? (
+            <CategoryEditRow
+              key={c.id}
+              category={c}
+              busy={busy}
+              onCancel={() => setEditingId(null)}
+              onSave={async (name, monthlyGoal) => {
+                const ok = await run(() => api.patch(`/api/categories/${c.id}`, { name, monthlyGoal }));
+                if (ok) setEditingId(null);
+              }}
+            />
+          ) : (
+            <li key={c.id} className="flex items-center justify-between gap-2 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm text-neutral-800 dark:text-neutral-100">{c.name}</p>
+                <p className="text-xs text-neutral-400">
+                  {c.monthlyGoal ? `${formatCurrency(c.monthlyGoal)} / month` : "No monthly goal"}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-1">
+                <button
+                  onClick={() => setEditingId(c.id)}
+                  aria-label={`Edit ${c.name}`}
+                  className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-700"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => run(() => api.patch(`/api/categories/${c.id}`, { archived: true }))}
+                  disabled={busy}
+                  aria-label={`Hide ${c.name}`}
+                  title="Hide — past expenses keep this category"
+                  className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-red-600 dark:hover:bg-neutral-700"
+                >
+                  <EyeOff size={14} />
+                </button>
+              </div>
+            </li>
+          )
+        )}
+      </ul>
+
+      {hidden.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-1 text-xs text-neutral-400">Hidden</p>
+          <ul className="divide-y divide-neutral-100 dark:divide-neutral-800">
+            {hidden.map((c) => (
+              <li key={c.id} className="flex items-center justify-between py-1.5">
+                <span className="text-sm text-neutral-400">{c.name}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => run(() => api.patch(`/api/categories/${c.id}`, { archived: false }))}
+                >
+                  <RotateCcw size={13} /> Restore
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function CategoryEditRow({
+  category,
+  busy,
+  onCancel,
+  onSave,
+}: {
+  category: Category;
+  busy: boolean;
+  onCancel: () => void;
+  onSave: (name: string, monthlyGoal: number | null) => void;
+}) {
+  const [name, setName] = useState(category.name);
+  const [goal, setGoal] = useState(category.monthlyGoal ? String(category.monthlyGoal) : "");
+
+  return (
+    <li className="py-2">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave(name.trim(), goal === "" ? null : Number(goal));
+        }}
+        className="flex items-center gap-2"
+      >
+        <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} required aria-label="Name" />
+        <Input
+          type="number"
+          min="0"
+          step="0.01"
+          value={goal}
+          onChange={(e) => setGoal(e.target.value)}
+          placeholder="Goal / month"
+          className="w-32"
+          aria-label="Monthly goal"
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          aria-label="Save"
+          className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-brand dark:hover:bg-neutral-700"
+        >
+          <Check size={16} />
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="Cancel"
+          className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-700"
+        >
+          <X size={16} />
+        </button>
+      </form>
+    </li>
   );
 }

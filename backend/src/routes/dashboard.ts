@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { asyncHandler } from "../lib/validation.js";
 import { monthRange, toMonthKey, monthLabel } from "../lib/dates.js";
+import { effectiveBudgets } from "../lib/budgets.js";
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.get(
     const [
       monthIncomeAgg,
       monthExpenseAgg,
-      budgetAgg,
+      budgets,
       allIncomeAgg,
       allExpenseAgg,
       receivableAgg,
@@ -31,7 +32,7 @@ router.get(
     ] = await Promise.all([
       prisma.income.aggregate({ _sum: { amount: true }, where: { userId: uid, date: { gte: start, lt: end } } }),
       prisma.expense.aggregate({ _sum: { amount: true }, where: { userId: uid, date: { gte: start, lt: end } } }),
-      prisma.budget.aggregate({ _sum: { amount: true }, where: { userId: uid, month } }),
+      effectiveBudgets(uid!, month),
       prisma.income.aggregate({ _sum: { amount: true }, where: { userId: uid } }),
       prisma.expense.aggregate({ _sum: { amount: true }, where: { userId: uid } }),
       // Money others owe me (still pending)
@@ -49,7 +50,7 @@ router.get(
 
     const monthlyIncome = monthIncomeAgg._sum.amount ?? 0;
     const totalExpenses = monthExpenseAgg._sum.amount ?? 0;
-    const monthlyBudget = budgetAgg._sum.amount ?? 0;
+    const monthlyBudget = budgets.reduce((s, b) => s + b.amount, 0);
     const moneyToReceive = receivableAgg._sum.amount ?? 0;
     const moneyToPay = payableAgg._sum.amount ?? 0;
 

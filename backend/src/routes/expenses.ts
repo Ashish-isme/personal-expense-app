@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { asyncHandler, parseBody, expenseSchema } from "../lib/validation.js";
+import { resolveCategory, checkBudgetAlertsForDates } from "../lib/budgets.js";
 
 const router = Router();
 
@@ -57,7 +58,9 @@ router.post(
   "/",
   asyncHandler(async (req, res) => {
     const data = parseBody(expenseSchema, req.body);
+    data.category = await resolveCategory(req.userId!, data.category);
     const expense = await prisma.expense.create({ data: { ...data, userId: req.userId! } });
+    await checkBudgetAlertsForDates(req.userId!, [expense.date]);
     res.status(201).json(expense);
   })
 );
@@ -70,7 +73,9 @@ router.put(
     // Ensure the record belongs to the authenticated user before updating.
     const owned = await prisma.expense.findFirst({ where: { id: req.params.id, userId: req.userId } });
     if (!owned) return res.status(404).json({ error: "Expense not found" });
+    data.category = await resolveCategory(req.userId!, data.category);
     const expense = await prisma.expense.update({ where: { id: req.params.id }, data });
+    await checkBudgetAlertsForDates(req.userId!, [expense.date]);
     res.json(expense);
   })
 );

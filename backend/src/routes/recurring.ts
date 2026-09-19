@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { asyncHandler, parseBody, recurringSchema } from "../lib/validation.js";
 import { advanceDate } from "../lib/dates.js";
+import { checkBudgetAlertsForDates, resolveCategory } from "../lib/budgets.js";
 
 const router = Router();
 
@@ -25,6 +26,7 @@ router.post(
   "/",
   asyncHandler(async (req, res) => {
     const data = parseBody(recurringSchema, req.body);
+    if (data.type === "expense") data.category = await resolveCategory(req.userId!, data.category);
     const rule = await prisma.recurring.create({
       data: { ...data, userId: req.userId!, nextRun: data.startDate },
     });
@@ -40,6 +42,7 @@ router.put(
     const data = parseBody(recurringSchema, req.body);
     const existing = await prisma.recurring.findFirst({ where: { id: req.params.id, userId: req.userId } });
     if (!existing) return res.status(404).json({ error: "Recurring rule not found" });
+    if (data.type === "expense") data.category = await resolveCategory(req.userId!, data.category);
 
     const startChanged = existing.startDate.getTime() !== data.startDate.getTime();
     const rule = await prisma.recurring.update({
@@ -137,6 +140,8 @@ export async function materializeDue(userId: string): Promise<{ expenses: number
     ...(incomeToCreate.length ? [prisma.income.createMany({ data: incomeToCreate })] : []),
     ...nextRunUpdates.map((u) => prisma.recurring.update({ where: { id: u.id }, data: { nextRun: u.nextRun } })),
   ]);
+
+  if (expensesToCreate.length) await checkBudgetAlertsForDates(userId, expensesToCreate.map((e) => e.date));
 
   return { expenses: expensesToCreate.length, income: incomeToCreate.length };
 }

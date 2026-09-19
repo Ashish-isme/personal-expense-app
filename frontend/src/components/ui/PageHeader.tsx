@@ -14,7 +14,7 @@ export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
         <h1 className="text-xl font-semibold tracking-tight text-neutral-800 dark:text-neutral-100">{title}</h1>
         {subtitle && <p className="mt-0.5 text-sm text-neutral-500 dark:text-neutral-400">{subtitle}</p>}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }

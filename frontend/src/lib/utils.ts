@@ -68,22 +68,6 @@ export function colorFor(index: number): string {
   return CHART_COLORS[index % CHART_COLORS.length];
 }
 
-/** Shared list of expense categories used in dropdowns. */
-export const EXPENSE_CATEGORIES = [
-  "Groceries",
-  "Rent",
-  "Transport",
-  "Dining",
-  "Utilities",
-  "Entertainment",
-  "Health",
-  "Shopping",
-  "Education",
-  "Travel",
-  "Subscriptions",
-  "Other",
-];
-
 export const PAYMENT_METHODS = ["Cash", "Bank", "eSewa", "Khalti"] as const;
 
 /** Percentage at/above which a budget is flagged as "near its limit". */

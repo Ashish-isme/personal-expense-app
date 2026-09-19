@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Bell, CheckCheck } from "lucide-react";
-import { api } from "../../lib/api";
+import { api, NOTIFICATIONS_CHANGED_EVENT } from "../../lib/api";
 import type { NotificationFeed } from "../../lib/types";
 import { cx } from "../../lib/utils";
 
@@ -45,7 +45,12 @@ export function NotificationBell() {
   useEffect(() => {
     load();
     const t = setInterval(load, POLL_MS);
-    return () => clearInterval(t);
+    // Refresh straight away after actions that can raise alerts (e.g. adding an expense).
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, load);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, load);
+    };
   }, []);
 
   // Close on outside click.
@@ -105,7 +110,18 @@ export function NotificationBell() {
                     <div className="flex items-start gap-2">
                       {!n.read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
                       <div className={cx("min-w-0", n.read && "pl-3.5")}>
-                        <p className="text-sm font-medium text-neutral-800 dark:text-neutral-100">{n.title}</p>
+                        <p
+                          className={cx(
+                            "text-sm font-medium",
+                            n.type === "budget_exceeded"
+                              ? "text-red-600 dark:text-red-400"
+                              : n.type === "budget_warning"
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-neutral-800 dark:text-neutral-100"
+                          )}
+                        >
+                          {n.title}
+                        </p>
                         <p className="mt-0.5 whitespace-pre-line text-xs text-neutral-500 dark:text-neutral-400">
                           {toPlainText(n.body)}
                         </p>

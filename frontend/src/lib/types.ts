@@ -28,15 +28,34 @@ export interface Income {
   notes?: string | null;
 }
 
+/** The budget in effect for a category in a month (GET /api/budgets). */
 export interface Budget {
+  /** The override's id, or `goal:<categoryId>` for a standing goal. */
   id: string;
   month: string;
   category: string;
+  categoryId: string | null;
   amount: number;
-  // Enriched fields returned by GET /api/budgets
+  /** "goal" = applies every month; "month" = set for this month only. */
+  source: "goal" | "month";
+  overrideId: string | null;
   actual: number;
   remaining: number;
   percentUsed: number;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  /** Standing spending limit applied to every month, if set. */
+  monthlyGoal: number | null;
+  archived: boolean;
+}
+
+export interface CategoriesResponse {
+  items: Category[];
+  /** Common categories the user doesn't have yet. */
+  suggestions: string[];
 }
 
 export type RecurringType = "expense" | "income";

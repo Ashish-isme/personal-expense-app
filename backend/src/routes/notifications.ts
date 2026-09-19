@@ -2,11 +2,9 @@ import { Router, type Request, type Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { asyncHandler } from "../lib/validation.js";
 import { computeGroupBalances } from "../lib/balances.js";
-import { notify } from "../lib/notify.js";
+import { notify, money } from "../lib/notify.js";
 
 const router = Router();
-
-const money = (n: number) => `Rs ${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 // GET /api/notifications — newest first, plus the unread count for the bell badge.
 router.get(
