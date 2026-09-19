@@ -1,22 +1,30 @@
 import { useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, HandCoins, Check, RotateCcw, ArrowDownLeft, ArrowUpRight } from "lucide-react";
-import { useFetch } from "../lib/useFetch";
-import { api } from "../lib/api";
-import type { Debt, DebtDirection } from "../lib/types";
-import { formatCurrency, formatDate, toDateInput, cx } from "../lib/utils";
-import { PageHeader } from "../components/ui/PageHeader";
-import { Button } from "../components/ui/Button";
-import { Modal } from "../components/ui/Modal";
-import { FieldWrap, Input, Select } from "../components/ui/Field";
-import { Badge } from "../components/ui/Badge";
-import { StatCard } from "../components/ui/StatCard";
-import { EmptyState } from "../components/ui/EmptyState";
+import { toast } from "sonner";
+import { useFetch } from "@/lib/useFetch";
+import { api } from "@/lib/api";
+import type { Debt, DebtDirection } from "@/lib/types";
+import { cn, formatCurrency, formatDate, toDateInput } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PageHeader } from "@/components/app/PageHeader";
+import { StatCard } from "@/components/app/StatCard";
+import { EmptyState } from "@/components/app/EmptyState";
+import { FormError, FormField } from "@/components/app/FormField";
+import { RowActions } from "@/components/app/RowActions";
+import { ListSkeleton } from "@/components/app/ListSkeleton";
+import { useConfirm } from "@/components/app/ConfirmProvider";
 
 export function Debts() {
   const { data, loading, reload } = useFetch<Debt[]>(`/api/debts`);
   const [editing, setEditing] = useState<Debt | null>(null);
   const [open, setOpen] = useState(false);
   const [presetDirection, setPresetDirection] = useState<DebtDirection>("owed_to_me");
+  const confirm = useConfirm();
 
   const { receivable, payable, owedToMe, iOwe } = useMemo(() => {
     const debts = data ?? [];
@@ -26,13 +34,16 @@ export function Debts() {
     return { receivable: sum(owedToMe), payable: sum(iOwe), owedToMe, iOwe };
   }, [data]);
 
-  const toggleStatus = async (id: string) => {
-    await api.patch(`/api/debts/${id}/toggle`);
+  const toggleStatus = async (d: Debt) => {
+    await api.patch(`/api/debts/${d.id}/toggle`);
+    toast.success(d.status === "paid" ? "Marked as pending" : "Marked as settled");
     reload();
   };
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this record?")) return;
-    await api.del(`/api/debts/${id}`);
+  const handleDelete = async (d: Debt) => {
+    const ok = await confirm({ title: "Delete this record?", description: `${d.person} · ${formatCurrency(d.amount)}` });
+    if (!ok) return;
+    await api.del(`/api/debts/${d.id}`);
+    toast.success("Record deleted");
     reload();
   };
   const openAdd = (direction: DebtDirection) => {
@@ -40,155 +51,152 @@ export function Debts() {
     setEditing(null);
     setOpen(true);
   };
+  const openEdit = (d: Debt) => {
+    setEditing(d);
+    setOpen(true);
+  };
 
   return (
-    <div>
-      <PageHeader title="Money Owed" subtitle="Track who owes you and what you owe others" />
+    <>
+      <PageHeader title="Money Owed" description="Track who owes you and what you owe others" />
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <StatCard label="Money to Receive" value={receivable} icon={ArrowDownLeft} tone="positive" />
-        <StatCard label="Money to Pay" value={payable} icon={ArrowUpRight} tone="negative" />
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard label="To receive" value={receivable} icon={ArrowDownLeft} tone="positive" hint="Pending, owed to you" />
+        <StatCard label="To pay" value={payable} icon={ArrowUpRight} tone="negative" hint="Pending, you owe" />
       </div>
 
-      {loading && !data ? (
-        <div className="card p-6 text-sm text-neutral-400">Loading…</div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <DebtColumn
-            title="Owes Me"
-            accent="positive"
-            debts={owedToMe}
-            onAdd={() => openAdd("owed_to_me")}
-            onEdit={(d) => {
-              setEditing(d);
-              setOpen(true);
-            }}
-            onToggle={toggleStatus}
-            onDelete={handleDelete}
-          />
-          <DebtColumn
-            title="I Owe"
-            accent="negative"
-            debts={iOwe}
-            onAdd={() => openAdd("i_owe")}
-            onEdit={(d) => {
-              setEditing(d);
-              setOpen(true);
-            }}
-            onToggle={toggleStatus}
-            onDelete={handleDelete}
-          />
-        </div>
-      )}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <DebtList
+          title="Owes me"
+          description="Money others owe you"
+          tone="positive"
+          loading={loading && !data}
+          debts={owedToMe}
+          onAdd={() => openAdd("owed_to_me")}
+          onEdit={openEdit}
+          onToggle={toggleStatus}
+          onDelete={handleDelete}
+        />
+        <DebtList
+          title="I owe"
+          description="Money you owe others"
+          tone="negative"
+          loading={loading && !data}
+          debts={iOwe}
+          onAdd={() => openAdd("i_owe")}
+          onEdit={openEdit}
+          onToggle={toggleStatus}
+          onDelete={handleDelete}
+        />
+      </div>
 
-      <DebtModal
-        open={open}
-        debt={editing}
-        presetDirection={presetDirection}
-        onClose={() => setOpen(false)}
-        onSaved={() => {
-          setOpen(false);
-          reload();
-        }}
-      />
-    </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit record" : "Add record"}</DialogTitle>
+          </DialogHeader>
+          {/* Content unmounts when closed, so defaults reset for each record. */}
+          <DebtForm
+            debt={editing}
+            presetDirection={presetDirection}
+            onCancel={() => setOpen(false)}
+            onSaved={() => {
+              setOpen(false);
+              reload();
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
-interface DebtColumnProps {
+interface DebtListProps {
   title: string;
-  accent: "positive" | "negative";
+  description: string;
+  tone: "positive" | "negative";
+  loading: boolean;
   debts: Debt[];
   onAdd: () => void;
   onEdit: (d: Debt) => void;
-  onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
+  onToggle: (d: Debt) => void;
+  onDelete: (d: Debt) => void;
 }
 
-function DebtColumn({ title, accent, debts, onAdd, onEdit, onToggle, onDelete }: DebtColumnProps) {
+function DebtList({ title, description, tone, loading, debts, onAdd, onEdit, onToggle, onDelete }: DebtListProps) {
   return (
-    <div className="card p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">{title}</h2>
-        <Button size="sm" variant="secondary" onClick={onAdd}>
-          <Plus size={14} /> Add
-        </Button>
-      </div>
-
-      {debts.length ? (
-        <ul className="space-y-2">
-          {debts.map((d) => (
-            <li
-              key={d.id}
-              className={cx(
-                "group rounded-lg border border-neutral-200 p-3 dark:border-neutral-800",
-                d.status === "paid" && "opacity-60"
-              )}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-medium text-neutral-800 dark:text-neutral-100">{d.person}</p>
-                    <Badge tone={d.status === "paid" ? "green" : "amber"}>{d.status === "paid" ? "Settled" : "Pending"}</Badge>
+    <Card className="gap-0 pb-0">
+      <CardHeader className="border-b pb-4">
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+        <CardAction>
+          <Button size="sm" variant="outline" onClick={onAdd}>
+            <Plus /> Add
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="px-0">
+        {loading ? (
+          <ListSkeleton rows={3} />
+        ) : debts.length ? (
+          <ul className="divide-y">
+            {debts.map((d) => {
+              const paid = d.status === "paid";
+              return (
+                <li key={d.id} className={cn("flex items-center gap-3 py-3 pr-3 pl-6", paid && "text-muted-foreground")}>
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium">{d.person}</span>
+                      <Badge
+                        variant={paid ? "secondary" : "outline"}
+                        className={cn("shrink-0", !paid && "border-warning/40 text-warning")}
+                      >
+                        {paid ? "Settled" : "Pending"}
+                      </Badge>
+                    </p>
+                    {(d.description || d.dueDate) && (
+                      <p className="text-muted-foreground truncate text-xs">
+                        {d.description}
+                        {d.description && d.dueDate && " · "}
+                        {d.dueDate && `Due ${formatDate(d.dueDate)}`}
+                      </p>
+                    )}
                   </div>
-                  {d.description && <p className="truncate text-xs text-neutral-400">{d.description}</p>}
-                  {d.dueDate && <p className="mt-0.5 text-xs text-neutral-400">Due {formatDate(d.dueDate)}</p>}
-                </div>
-                <div className="text-right">
-                  <p
-                    className={cx(
-                      "text-sm font-semibold",
-                      accent === "positive" ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+                  <span
+                    className={cn(
+                      "tabular shrink-0 text-sm font-medium",
+                      paid ? "line-through" : tone === "positive" ? "text-positive" : "text-destructive"
                     )}
                   >
                     {formatCurrency(d.amount)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-2 flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
-                <button
-                  onClick={() => onToggle(d.id)}
-                  className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-emerald-600 dark:hover:bg-neutral-700"
-                  aria-label={d.status === "paid" ? "Mark pending" : "Mark settled"}
-                  title={d.status === "paid" ? "Mark pending" : "Mark settled"}
-                >
-                  {d.status === "paid" ? <RotateCcw size={14} /> : <Check size={14} />}
-                </button>
-                <button
-                  onClick={() => onEdit(d)}
-                  className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-700"
-                  aria-label="Edit"
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  onClick={() => onDelete(d.id)}
-                  className="rounded-md p-1.5 text-neutral-400 hover:bg-neutral-100 hover:text-red-600 dark:hover:bg-neutral-700"
-                  aria-label="Delete"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <EmptyState icon={HandCoins} title="Nothing here yet" />
-      )}
-    </div>
+                  </span>
+                  <RowActions
+                    actions={[
+                      { label: paid ? "Mark pending" : "Mark settled", icon: paid ? RotateCcw : Check, onSelect: () => onToggle(d) },
+                      { label: "Edit", icon: Pencil, onSelect: () => onEdit(d) },
+                      { label: "Delete", icon: Trash2, onSelect: () => onDelete(d), destructive: true },
+                    ]}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <EmptyState icon={HandCoins} title="Nothing here yet" />
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
-interface DebtModalProps {
-  open: boolean;
+interface DebtFormProps {
   debt: Debt | null;
   presetDirection: DebtDirection;
-  onClose: () => void;
+  onCancel: () => void;
   onSaved: () => void;
 }
 
-function DebtModal({ open, debt, presetDirection, onClose, onSaved }: DebtModalProps) {
+function DebtForm({ debt, presetDirection, onCancel, onSaved }: DebtFormProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -208,6 +216,7 @@ function DebtModal({ open, debt, presetDirection, onClose, onSaved }: DebtModalP
     try {
       if (debt) await api.put(`/api/debts/${debt.id}`, payload);
       else await api.post("/api/debts", payload);
+      toast.success(debt ? "Record updated" : "Record added");
       onSaved();
     } catch (err) {
       setError((err as Error).message);
@@ -217,57 +226,55 @@ function DebtModal({ open, debt, presetDirection, onClose, onSaved }: DebtModalP
   };
 
   return (
-    <Modal open={open} title={debt ? "Edit Record" : "Add Record"} onClose={onClose}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit(e.currentTarget);
-        }}
-        className="space-y-4"
-      >
-        <div className="grid grid-cols-2 gap-3">
-          <FieldWrap label="Type">
-            <Select name="direction" defaultValue={debt?.direction ?? presetDirection}>
-              <option value="owed_to_me">Owes me</option>
-              <option value="i_owe">I owe</option>
-            </Select>
-          </FieldWrap>
-          <FieldWrap label="Status">
-            <Select name="status" defaultValue={debt?.status ?? "pending"}>
-              <option value="pending">Pending</option>
-              <option value="paid">Settled</option>
-            </Select>
-          </FieldWrap>
-        </div>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(e.currentTarget);
+      }}
+      className="grid gap-4"
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <FormField label="Type" htmlFor="direction">
+          <NativeSelect id="direction" name="direction" defaultValue={debt?.direction ?? presetDirection}>
+            <option value="owed_to_me">Owes me</option>
+            <option value="i_owe">I owe</option>
+          </NativeSelect>
+        </FormField>
+        <FormField label="Status" htmlFor="status">
+          <NativeSelect id="status" name="status" defaultValue={debt?.status ?? "pending"}>
+            <option value="pending">Pending</option>
+            <option value="paid">Settled</option>
+          </NativeSelect>
+        </FormField>
+      </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <FieldWrap label="Person">
-            <Input name="person" defaultValue={debt?.person} placeholder="Name" required />
-          </FieldWrap>
-          <FieldWrap label="Amount">
-            <Input type="number" name="amount" min="0" step="0.01" defaultValue={debt?.amount} placeholder="0" required />
-          </FieldWrap>
-        </div>
+      <div className="grid grid-cols-2 gap-3">
+        <FormField label="Person" htmlFor="person">
+          <Input id="person" name="person" defaultValue={debt?.person} placeholder="Name" required autoFocus={!debt} />
+        </FormField>
+        <FormField label="Amount" htmlFor="amount">
+          <Input id="amount" type="number" inputMode="decimal" name="amount" min="0" step="0.01" defaultValue={debt?.amount} placeholder="0" required />
+        </FormField>
+      </div>
 
-        <FieldWrap label="Description (optional)">
-          <Input name="description" defaultValue={debt?.description ?? ""} placeholder="What is this for?" />
-        </FieldWrap>
+      <FormField label="Description (optional)" htmlFor="description">
+        <Input id="description" name="description" defaultValue={debt?.description ?? ""} placeholder="What is this for?" />
+      </FormField>
 
-        <FieldWrap label="Due Date (optional)">
-          <Input type="date" name="dueDate" defaultValue={debt?.dueDate ? toDateInput(debt.dueDate) : ""} />
-        </FieldWrap>
+      <FormField label="Due date (optional)" htmlFor="dueDate" hint="Dated entries are placed in that month on the Forecast.">
+        <Input id="dueDate" type="date" name="dueDate" defaultValue={debt?.dueDate ? toDateInput(debt.dueDate) : ""} />
+      </FormField>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+      <FormError message={error} />
 
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Save"}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={saving}>
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }

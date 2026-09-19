@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Receipt,
@@ -10,104 +10,146 @@ import {
   Users,
   TrendingUp,
   LogOut,
-  X,
+  ChevronsUpDown,
 } from "lucide-react";
-import { cx } from "../../lib/utils";
-import { useAuth } from "../../context/AuthContext";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useAuth } from "@/context/AuthContext";
 
-const nav = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/expenses", label: "Expenses", icon: Receipt },
-  { to: "/income", label: "Income", icon: Wallet },
-  { to: "/budget", label: "Budget", icon: PiggyBank },
-  { to: "/forecast", label: "Forecast", icon: TrendingUp },
-  { to: "/debts", label: "Money Owed", icon: HandCoins },
-  { to: "/groups", label: "Groups", icon: Users },
-  { to: "/recurring", label: "Recurring", icon: Repeat },
-  { to: "/reports", label: "Reports", icon: FileBarChart },
+export const NAV_GROUPS = [
+  {
+    label: "Overview",
+    items: [
+      { to: "/", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/forecast", label: "Forecast", icon: TrendingUp },
+    ],
+  },
+  {
+    label: "Money",
+    items: [
+      { to: "/expenses", label: "Expenses", icon: Receipt },
+      { to: "/income", label: "Income", icon: Wallet },
+      { to: "/budget", label: "Budget", icon: PiggyBank },
+      { to: "/recurring", label: "Recurring", icon: Repeat },
+    ],
+  },
+  {
+    label: "People",
+    items: [
+      { to: "/debts", label: "Money Owed", icon: HandCoins },
+      { to: "/groups", label: "Groups", icon: Users },
+    ],
+  },
+  {
+    label: "Insights",
+    items: [{ to: "/reports", label: "Reports", icon: FileBarChart }],
+  },
 ];
 
-interface SidebarProps {
-  open: boolean;
-  onClose: () => void;
+/** Title of the page at `pathname`, for the top bar. */
+export function pageTitle(pathname: string): string {
+  const all = NAV_GROUPS.flatMap((g) => g.items);
+  const match = all.find((i) => (i.to === "/" ? pathname === "/" : pathname.startsWith(i.to)));
+  return match?.label ?? "";
 }
 
-/** Left navigation. Fixed on desktop, slide-over drawer on mobile. */
-export function Sidebar({ open, onClose }: SidebarProps) {
+export function AppSidebar() {
   const { user, logout } = useAuth();
+  const { pathname } = useLocation();
+  const { setOpenMobile } = useSidebar();
+  const initial = (user?.name || user?.email || "?").charAt(0).toUpperCase();
+
   return (
-    <>
-      {/* Mobile backdrop */}
-      {open && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={onClose} />}
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <NavLink to="/" onClick={() => setOpenMobile(false)}>
+                <span className="bg-primary text-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
+                  <PiggyBank className="size-4" />
+                </span>
+                <span className="font-semibold tracking-tight">Finance</span>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
 
-      <aside
-        className={cx(
-          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-neutral-200 bg-white transition-transform dark:border-neutral-800 dark:bg-surface-card lg:translate-x-0",
-          open ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        <div className="flex h-14 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-white">
-              <PiggyBank size={16} />
-            </span>
-            <span className="font-semibold tracking-tight text-neutral-800 dark:text-neutral-100">
-              Finance
-            </span>
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 lg:hidden"
-            aria-label="Close menu"
-          >
-            <X size={18} />
-          </button>
-        </div>
+      <SidebarContent>
+        {NAV_GROUPS.map((group) => (
+          <SidebarGroup key={group.label}>
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map(({ to, label, icon: Icon }) => {
+                  const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
+                  return (
+                    <SidebarMenuItem key={to}>
+                      <SidebarMenuButton asChild isActive={active} tooltip={label}>
+                        <NavLink to={to} onClick={() => setOpenMobile(false)}>
+                          <Icon />
+                          <span>{label}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
+      </SidebarContent>
 
-        <nav className="flex-1 space-y-1 px-3 py-2">
-          {nav.map(({ to, label, icon: Icon, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              onClick={onClose}
-              className={({ isActive }) =>
-                cx(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition",
-                  isActive
-                    ? "bg-brand/10 text-brand"
-                    : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                )
-              }
-            >
-              <Icon size={18} />
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-
-        <div className="border-t border-neutral-200 p-3 dark:border-neutral-800">
-          <div className="flex items-center gap-3 rounded-lg px-2 py-2">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10 text-sm font-semibold uppercase text-brand">
-              {(user?.name || user?.email || "?").charAt(0)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-neutral-800 dark:text-neutral-100">
-                {user?.name || "Account"}
-              </p>
-              <p className="truncate text-xs text-neutral-400">{user?.email}</p>
-            </div>
-            <button
-              onClick={logout}
-              className="rounded-md p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-red-600 dark:hover:bg-neutral-800"
-              aria-label="Sign out"
-              title="Sign out"
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
-        </div>
-      </aside>
-    </>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton size="lg">
+                  <Avatar className="size-8 rounded-lg">
+                    <AvatarFallback className="bg-accent text-accent-foreground rounded-lg text-sm font-medium">
+                      {initial}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-medium">{user?.name || "Account"}</span>
+                    <span className="text-muted-foreground truncate text-xs">{user?.email}</span>
+                  </div>
+                  <ChevronsUpDown className="ml-auto size-4" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56">
+                <DropdownMenuLabel className="text-muted-foreground truncate font-normal">{user?.email}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={logout}>
+                  <LogOut /> Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
   );
 }

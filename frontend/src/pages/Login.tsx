@@ -1,10 +1,15 @@
-import { useEffect, useState } from "react";
-import { PiggyBank } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
-import { Button } from "../components/ui/Button";
-import { FieldWrap, Input } from "../components/ui/Field";
-import { api } from "../lib/api";
-import { useSlowHint } from "../lib/useSlowHint";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, PiggyBank } from "lucide-react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
+import { useAuth } from "@/context/AuthContext";
+import { api } from "@/lib/api";
+import { useSlowHint } from "@/lib/useSlowHint";
+import { prefersReducedMotion } from "@/lib/motion";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { FormError, FormField } from "@/components/app/FormField";
 
 /** Combined sign-in / sign-up screen shown when there is no active session. */
 export function Login() {
@@ -13,6 +18,7 @@ export function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const slow = useSlowHint(submitting);
+  const ref = useRef<HTMLDivElement>(null);
 
   // Start waking the server and database while the user is still typing, so
   // the sign-in itself doesn't have to wait for a cold start.
@@ -21,6 +27,14 @@ export function Login() {
       /* best-effort — sign-in retries on its own if the server is still waking */
     });
   }, []);
+
+  useGSAP(
+    () => {
+      if (prefersReducedMotion()) return;
+      gsap.from(ref.current!.children, { opacity: 0, y: 10, duration: 0.45, ease: "power2.out", stagger: 0.06 });
+    },
+    { scope: ref }
+  );
 
   const submit = async (form: HTMLFormElement) => {
     const fd = new FormData(form);
@@ -40,80 +54,86 @@ export function Login() {
     }
   };
 
+  const isLogin = mode === "login";
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface-subtle px-4 dark:bg-surface-dark">
-      <div className="w-full max-w-sm">
-        <div className="mb-6 flex flex-col items-center text-center">
-          <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-brand text-white">
-            <PiggyBank size={22} />
+    <div className="bg-muted/40 flex min-h-svh items-center justify-center px-4 py-10">
+      <div ref={ref} className="w-full max-w-sm space-y-6">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <span className="bg-primary text-primary-foreground flex size-10 items-center justify-center rounded-xl">
+            <PiggyBank className="size-5" />
           </span>
-          <h1 className="text-lg font-semibold tracking-tight text-neutral-800 dark:text-neutral-100">
-            {mode === "login" ? "Welcome back" : "Create your account"}
-          </h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            {mode === "login" ? "Sign in to your finance tracker" : "Start tracking your money in seconds"}
-          </p>
+          <span className="text-sm font-semibold tracking-tight">Finance</span>
         </div>
 
-        <div className="card p-6">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              submit(e.currentTarget);
-            }}
-            className="space-y-4"
-          >
-            {mode === "register" && (
-              <FieldWrap label="Name">
-                <Input name="name" placeholder="Your name" autoComplete="name" />
-              </FieldWrap>
-            )}
-
-            <FieldWrap label="Email">
-              <Input type="email" name="email" placeholder="you@example.com" autoComplete="email" required />
-            </FieldWrap>
-
-            <FieldWrap label="Password">
-              <Input
-                type="password"
-                name="password"
-                placeholder={mode === "register" ? "At least 6 characters" : "••••••••"}
-                autoComplete={mode === "login" ? "current-password" : "new-password"}
-                minLength={mode === "register" ? 6 : undefined}
-                required
-              />
-            </FieldWrap>
-
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            {slow && !error && (
-              <p className="text-sm text-neutral-400">
-                The server was asleep and is starting up. This can take up to a minute. Please keep this page open.
-              </p>
-            )}
-
-            <Button type="submit" disabled={submitting} className="w-full">
-              {submitting ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
-            </Button>
-          </form>
-
-          <p className="mt-4 text-center text-sm text-neutral-400">
-            {mode === "login" ? "Don't have an account? " : "Already have an account? "}
-            <button
-              type="button"
-              onClick={() => {
-                setMode(mode === "login" ? "register" : "login");
-                setError(null);
+        <Card>
+          <CardHeader className="text-center">
+            <CardTitle className="text-xl">{isLogin ? "Welcome back" : "Create your account"}</CardTitle>
+            <CardDescription>
+              {isLogin ? "Sign in to your finance tracker" : "Start tracking your money in seconds"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                submit(e.currentTarget);
               }}
-              className="font-medium text-brand hover:underline"
+              className="grid gap-4"
             >
-              {mode === "login" ? "Sign up" : "Sign in"}
-            </button>
-          </p>
-        </div>
+              {!isLogin && (
+                <FormField label="Name" htmlFor="name">
+                  <Input id="name" name="name" placeholder="Your name" autoComplete="name" />
+                </FormField>
+              )}
+              <FormField label="Email" htmlFor="email">
+                <Input id="email" type="email" name="email" placeholder="you@example.com" autoComplete="email" required />
+              </FormField>
+              <FormField label="Password" htmlFor="password">
+                <Input
+                  id="password"
+                  type="password"
+                  name="password"
+                  placeholder={isLogin ? "••••••••" : "At least 6 characters"}
+                  autoComplete={isLogin ? "current-password" : "new-password"}
+                  minLength={isLogin ? undefined : 6}
+                  required
+                />
+              </FormField>
 
-        {mode === "login" && (
-          <p className="mt-4 text-center text-xs text-neutral-400">
-            Demo login: <span className="font-medium">demo@finance.app</span> / <span className="font-medium">demo1234</span>
+              <FormError message={error} />
+              {slow && !error && (
+                <p className="text-muted-foreground text-sm">
+                  The server was asleep and is starting up. This can take up to a minute — please keep this page open.
+                </p>
+              )}
+
+              <Button type="submit" disabled={submitting} className="w-full">
+                {submitting && <Loader2 className="animate-spin" />}
+                {submitting ? "Please wait…" : isLogin ? "Sign in" : "Create account"}
+              </Button>
+            </form>
+
+            <p className="text-muted-foreground mt-6 text-center text-sm">
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode(isLogin ? "register" : "login");
+                  setError(null);
+                }}
+                className="text-foreground font-medium underline-offset-4 hover:underline"
+              >
+                {isLogin ? "Sign up" : "Sign in"}
+              </button>
+            </p>
+          </CardContent>
+        </Card>
+
+        {isLogin && (
+          <p className="text-muted-foreground text-center text-xs">
+            Demo login: <span className="text-foreground font-medium">demo@finance.app</span> /{" "}
+            <span className="text-foreground font-medium">demo1234</span>
           </p>
         )}
       </div>
