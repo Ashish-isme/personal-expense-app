@@ -12,6 +12,7 @@ build/
 .env.*.local
 
 # Database
+backups/
 *.db
 *.db-journal
 *.sqlite

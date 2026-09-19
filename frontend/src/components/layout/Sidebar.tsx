@@ -8,6 +8,7 @@ import {
   FileBarChart,
   Repeat,
   Users,
+  TrendingUp,
   LogOut,
   X,
 } from "lucide-react";
@@ -19,6 +20,7 @@ const nav = [
   { to: "/expenses", label: "Expenses", icon: Receipt },
   { to: "/income", label: "Income", icon: Wallet },
   { to: "/budget", label: "Budget", icon: PiggyBank },
+  { to: "/forecast", label: "Forecast", icon: TrendingUp },
   { to: "/debts", label: "Money Owed", icon: HandCoins },
   { to: "/groups", label: "Groups", icon: Users },
   { to: "/recurring", label: "Recurring", icon: Repeat },

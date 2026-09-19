@@ -15,6 +15,7 @@ import { ProgressBar } from "../components/ui/ProgressBar";
 import { StatCard } from "../components/ui/StatCard";
 import { Badge } from "../components/ui/Badge";
 import { EmptyState } from "../components/ui/EmptyState";
+import { ForecastOutlook } from "../components/ForecastOutlook";
 import { Target, TrendingDown, Banknote } from "lucide-react";
 
 /** "2026-09" → "September 2026". */
@@ -108,6 +109,11 @@ export function Budget() {
           tone={totals.remaining >= 0 ? "positive" : "negative"}
         />
       </div>
+
+      {/* The outlook is always about the current month, so only show it there. */}
+      {month === currentMonth() && (
+        <ForecastOutlook key={`${totals.budget}-${totals.actual}`} className="mb-4" />
+      )}
 
       {loading && !data ? (
         <div className="card p-6 text-sm text-neutral-400">Loading…</div>

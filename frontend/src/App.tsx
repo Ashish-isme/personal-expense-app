@@ -6,6 +6,7 @@ import { Income } from "./pages/Income";
 import { Budget } from "./pages/Budget";
 import { Debts } from "./pages/Debts";
 import { Reports } from "./pages/Reports";
+import { Forecast } from "./pages/Forecast";
 import { Recurring } from "./pages/Recurring";
 import { Groups } from "./pages/Groups";
 import { GroupDetail } from "./pages/GroupDetail";
@@ -55,6 +56,7 @@ export function App() {
         <Route path="expenses" element={<Expenses />} />
         <Route path="income" element={<Income />} />
         <Route path="budget" element={<Budget />} />
+        <Route path="forecast" element={<Forecast />} />
         <Route path="debts" element={<Debts />} />
         <Route path="groups" element={<Groups />} />
         <Route path="groups/:id" element={<GroupDetail />} />

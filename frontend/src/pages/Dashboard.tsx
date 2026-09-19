@@ -20,6 +20,7 @@ import { StatCard } from "../components/ui/StatCard";
 import { EmptyState } from "../components/ui/EmptyState";
 import { CategoryPieChart } from "../components/charts/CategoryPieChart";
 import { TrendChart } from "../components/charts/TrendChart";
+import { ForecastOutlook } from "../components/ForecastOutlook";
 
 export function Dashboard() {
   const [month, setMonth] = useState(currentMonth());
@@ -75,6 +76,8 @@ export function Dashboard() {
             <StatCard label="Money to Pay" value={data.summary.moneyToPay} icon={ArrowUpRight} tone="negative" />
             <StatCard label="Net Worth" value={data.summary.netWorth} icon={Landmark} tone="brand" hint="Lifetime + owed − owing" />
           </div>
+
+          {month === currentMonth() && <ForecastOutlook className="mt-4" />}
 
           {/* Charts */}
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-5">
