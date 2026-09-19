@@ -11,18 +11,31 @@ import { Groups } from "./pages/Groups";
 import { GroupDetail } from "./pages/GroupDetail";
 import { Login } from "./pages/Login";
 import { useAuth } from "./context/AuthContext";
+import { Button } from "./components/ui/Button";
+import { useSlowHint } from "./lib/useSlowHint";
 
 /**
  * Top-level routing. Until a session is confirmed we show a splash; unauthenticated
  * users see the login screen, everyone else gets the app shell.
  */
 export function App() {
-  const { user, initializing } = useAuth();
+  const { user, initializing, sessionError, retrySession } = useAuth();
+  const slow = useSlowHint(initializing);
 
   if (initializing) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-neutral-400">
-        Loading…
+      <div className="flex min-h-screen flex-col items-center justify-center gap-1 px-4 text-center text-sm text-neutral-400">
+        <p>Loading…</p>
+        {slow && <p>The server was asleep and is starting up. This can take up to a minute.</p>}
+      </div>
+    );
+  }
+
+  if (sessionError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4 text-center text-sm text-neutral-400">
+        <p>{sessionError}</p>
+        <Button onClick={retrySession}>Try again</Button>
       </div>
     );
   }
