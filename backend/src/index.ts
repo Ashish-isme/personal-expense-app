@@ -13,6 +13,7 @@ import notificationsRouter, { monthlySummaryHandler } from "./routes/notificatio
 import dashboardRouter from "./routes/dashboard.js";
 import reportsRouter from "./routes/reports.js";
 import { requireAuth } from "./lib/auth.js";
+import { prisma } from "./lib/prisma.js";
 
 const app = express();
 
@@ -23,6 +24,19 @@ app.use(express.json());
 
 // ---- Health check (used by Render) -------------------------------------------
 app.get("/api/health", (_req, res) => res.json({ status: "ok", time: new Date().toISOString() }));
+
+// ---- Warm-up (called by the login screen) ------------------------------------
+// Touches the database so an idle Postgres starts waking while the user is still
+// typing their password. Kept separate from /api/health, which Render polls
+// constantly and so must not keep the database awake.
+app.get("/api/warmup", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: "ok" });
+  } catch {
+    res.status(503).json({ error: "Database is not reachable yet" });
+  }
+});
 
 // ---- Public auth routes ------------------------------------------------------
 app.use("/api/auth", authRouter);
@@ -54,4 +68,6 @@ app.use((err: Error & { status?: number }, _req: Request, res: Response, _next: 
 const PORT = Number(process.env.PORT) || 4000;
 app.listen(PORT, () => {
   console.log(`🟢 Finance Tracker API listening on http://localhost:${PORT}`);
+  // Open the database connection now rather than on the first request.
+  prisma.$connect().catch((err) => console.error("Initial database connection failed:", err));
 });

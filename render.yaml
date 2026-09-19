@@ -12,10 +12,12 @@ services:
     runtime: node
     rootDir: backend
     plan: free
-    # Install deps + generate the Prisma client at build time.
-    buildCommand: npm install && npx prisma generate
-    # Sync the schema to the database, then start the API.
-    startCommand: npx prisma db push --skip-generate && npm start
+    # Install deps, generate the Prisma client and sync the schema at build time.
+    # The schema sync lives here, not in startCommand, because free instances
+    # sleep when idle: anything in startCommand runs on every wake-up and makes
+    # the first request (usually a login) wait for it.
+    buildCommand: npm install && npx prisma generate && npx prisma db push --skip-generate
+    startCommand: npm start
     healthCheckPath: /api/health
     envVars:
       # Paste your Neon (or other managed Postgres) connection string here in the

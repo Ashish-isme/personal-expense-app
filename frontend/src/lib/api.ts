@@ -22,19 +22,53 @@ export function setToken(token: string | null): void {
 /** Fires when a request is rejected as unauthenticated so the app can log out. */
 export const AUTH_ERROR_EVENT = "finance:auth-error";
 
+/** An error response from the API. `status` is 0 when the server couldn't be reached. */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
+/** True for failures worth retrying: server unreachable, waking up, or briefly down. */
+export function isTransient(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 0 || err.status >= 500);
+}
+
+/**
+ * Retries `fn` on transient failures with backoff. The free backend sleeps when
+ * idle and takes up to about a minute to wake, so the default budget covers that.
+ */
+export async function withRetry<T>(fn: () => Promise<T>, delaysMs = [2000, 4000, 8000, 15000, 30000]): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!isTransient(err) || attempt >= delaysMs.length) throw err;
+      await new Promise((r) => setTimeout(r, delaysMs[attempt]));
+    }
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getToken();
-  const res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options?.headers,
+      },
+    });
+  } catch {
+    throw new ApiError("Can't reach the server. Check your connection and try again.", 0);
+  }
 
-  if (res.status === 401) {
-    // Session is gone/expired — drop the token and let the app react.
+  // Session is gone/expired — drop the token and let the app react. Only if the
+  // rejected token is still the current one: a slow request from an old session
+  // must not wipe out a login that happened while it was in flight.
+  if (res.status === 401 && token && token === getToken()) {
     setToken(null);
     window.dispatchEvent(new Event(AUTH_ERROR_EVENT));
   }
@@ -47,7 +81,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     } catch {
       /* ignore non-JSON error bodies */
     }
-    throw new Error(message);
+    throw new ApiError(message, res.status);
   }
 
   if (res.status === 204) return undefined as T;

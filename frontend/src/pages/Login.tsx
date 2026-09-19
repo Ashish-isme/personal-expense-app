@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PiggyBank } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Button } from "../components/ui/Button";
 import { FieldWrap, Input } from "../components/ui/Field";
+import { api } from "../lib/api";
+import { useSlowHint } from "../lib/useSlowHint";
 
 /** Combined sign-in / sign-up screen shown when there is no active session. */
 export function Login() {
@@ -10,6 +12,15 @@ export function Login() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const slow = useSlowHint(submitting);
+
+  // Start waking the server and database while the user is still typing, so
+  // the sign-in itself doesn't have to wait for a cold start.
+  useEffect(() => {
+    api.get("/api/warmup").catch(() => {
+      /* best-effort — sign-in retries on its own if the server is still waking */
+    });
+  }, []);
 
   const submit = async (form: HTMLFormElement) => {
     const fd = new FormData(form);
@@ -74,6 +85,11 @@ export function Login() {
             </FieldWrap>
 
             {error && <p className="text-sm text-red-600">{error}</p>}
+            {slow && !error && (
+              <p className="text-sm text-neutral-400">
+                The server was asleep and is starting up. This can take up to a minute. Please keep this page open.
+              </p>
+            )}
 
             <Button type="submit" disabled={submitting} className="w-full">
               {submitting ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
