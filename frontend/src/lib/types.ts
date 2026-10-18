@@ -86,6 +86,15 @@ export interface Debt {
   status: DebtStatus;
 }
 
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  savedAmount: number;
+  targetDate?: string | null;
+  notes?: string | null;
+}
+
 // ---- Groups / shared expenses ------------------------------------------------
 
 export type SplitMode = "equal" | "custom" | "percent";

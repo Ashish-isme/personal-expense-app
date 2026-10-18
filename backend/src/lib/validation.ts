@@ -108,3 +108,16 @@ export const debtSchema = z.object({
   direction: z.enum(["i_owe", "owed_to_me"]).default("i_owe"),
   status: z.enum(["pending", "paid"]).default("pending"),
 });
+
+export const savingsGoalSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(60, "Name must be 60 characters or fewer"),
+  targetAmount: z.coerce.number().positive("Target must be greater than 0"),
+  savedAmount: z.coerce.number().nonnegative("Saved amount must be 0 or more").default(0),
+  targetDate: z.coerce.date().optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
+export const savingsMoveSchema = z.object({
+  // Positive adds money to the goal, negative takes it out.
+  amount: z.coerce.number().refine((n) => n !== 0, "Amount must not be 0"),
+});

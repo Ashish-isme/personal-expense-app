@@ -30,6 +30,7 @@ model User {
   recurrings Recurring[]
   categories Category[]
   budgetAlerts BudgetAlert[]
+  savingsGoals SavingsGoal[]
 
   // Group / shared-expense relations
   createdGroups       Group[]             @relation("GroupCreator")
@@ -266,4 +267,22 @@ model Debt {
 
   @@index([userId, direction])
   @@index([userId, status])
+}
+
+/// Money being put aside for something specific — a purchase, a yearly trip,
+/// education, anything. `savedAmount` is how much is set aside so far; the
+/// optional `targetDate` is when the user wants to reach `targetAmount`.
+model SavingsGoal {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  targetAmount Float
+  savedAmount  Float     @default(0)
+  targetDate   DateTime?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId])
 }
