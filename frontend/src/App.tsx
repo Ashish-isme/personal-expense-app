@@ -16,6 +16,7 @@ const Income = page(() => import("./pages/Income"), "Income");
 const Budget = page(() => import("./pages/Budget"), "Budget");
 const Forecast = page(() => import("./pages/Forecast"), "Forecast");
 const Debts = page(() => import("./pages/Debts"), "Debts");
+const Savings = page(() => import("./pages/Savings"), "Savings");
 const Groups = page(() => import("./pages/Groups"), "Groups");
 const GroupDetail = page(() => import("./pages/GroupDetail"), "GroupDetail");
 const Recurring = page(() => import("./pages/Recurring"), "Recurring");
@@ -70,6 +71,7 @@ export function App() {
         <Route path="income" element={<Income />} />
         <Route path="budget" element={<Budget />} />
         <Route path="forecast" element={<Forecast />} />
+        <Route path="savings" element={<Savings />} />
         <Route path="debts" element={<Debts />} />
         <Route path="groups" element={<Groups />} />
         <Route path="groups/:id" element={<GroupDetail />} />
